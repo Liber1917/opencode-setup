@@ -143,27 +143,50 @@ EOF
 fi
 
 # ------------------------------------------------------------------
-# 步骤 4: 安装 Bun 运行时
+# 步骤 4: 安装 unzip（Bun 安装脚本依赖）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[4/7] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[4/7] 安装 unzip...${NC}"
 
-install_bun() {
-  # Bun 安装脚本需要 unzip
-  if ! command -v unzip &> /dev/null; then
-    echo "正在安装 unzip..."
-    if command -v apt-get &> /dev/null; then
-      sudo apt-get install -y unzip
-    elif command -v yum &> /dev/null; then
-      sudo yum install -y unzip
-    elif command -v brew &> /dev/null; then
-      brew install unzip
-    elif command -v apk &> /dev/null; then
-      apk add unzip
-    else
-      echo -e "${RED}✗ 无法自动安装 unzip，请手动安装后重试${NC}"
-      exit 1
-    fi
-    echo -e "${GREEN}✓ unzip 安装成功${NC}"
+install_unzip_if_missing() {
+  if command -v unzip &> /dev/null; then
+    return 0
+  fi
+  echo "正在安装 unzip..."
+  if command -v apt-get &> /dev/null; then
+    sudo apt-get install -y unzip
+  elif command -v yum &> /dev/null; then
+    sudo yum install -y unzip
+  elif command -v brew &> /dev/null; then
+    brew install unzip
+  elif command -v apk &> /dev/null; then
+    apk add unzip
+  else
+    echo -e "${RED}✗ 无法自动安装 unzip，请手动安装后重试${NC}"
+    exit 1
+  fi
+}
+
+install_unzip_if_missing
+echo -e "${GREEN}✓ unzip 已就绪${NC}"
+
+# ------------------------------------------------------------------
+# 步骤 5: 安装 Bun 运行时
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[5/7] 安装 Bun 运行时...${NC}"
+
+ensure_bun() {
+  if command -v bun &> /dev/null; then
+    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+    return 0
+  fi
+  if [ -f "$HOME/.bun/bin/bun" ]; then
+    export PATH="$HOME/.bun/bin:$PATH"
+    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+    return 0
+  fi
+  if [ -f "/usr/local/bin/bun" ]; then
+    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+    return 0
   fi
 
   echo "正在安装 Bun..."
@@ -177,11 +200,7 @@ install_bun() {
   fi
 }
 
-if command -v bun &> /dev/null; then
-  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
-elif [ -f "$HOME/.bun/bin/bun" ]; then
-  export PATH="$HOME/.bun/bin:$PATH"
-  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+ensure_bun
 elif [ -f "/usr/local/bin/bun" ]; then
   echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
 else
@@ -202,7 +221,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 5: 安装 OpenCode
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[5/7] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[6/8] 安装 OpenCode...${NC}"
 
 if command -v opencode &> /dev/null; then
   echo -e "${GREEN}✓ OpenCode 已安装 ($(opencode --version 2>/dev/null || echo 'ok'))${NC}"
@@ -229,7 +248,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 6: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[6/7] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[7/8] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -240,9 +259,9 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 步骤 7: 安装 GSD 工作流（可选）
+# 步骤 8: 安装 GSD 工作流（可选）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[7/7] 安装 GSD 工作流...${NC}"
+echo -e "${YELLOW}[8/8] 安装 GSD 工作流...${NC}"
 
 GSD_DIR="$CONFIG_DIR/get-shit-done"
 if [ ! -d "$GSD_DIR" ]; then
