@@ -31,7 +31,7 @@ echo ""
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[1/7] 检测已有配置...${NC}"
+echo -e "${YELLOW}[1/8] 检测已有配置...${NC}"
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
@@ -54,7 +54,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 2: 创建目录结构
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[2/7] 创建配置目录...${NC}"
+echo -e "${YELLOW}[2/8] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
@@ -64,7 +64,7 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 # 步骤 3: 生成配置文件
 # ------------------------------------------------------------------
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
-  echo -e "${YELLOW}[3/7] 生成配置文件...${NC}"
+  echo -e "${YELLOW}[3/8] 生成配置文件...${NC}"
 
   # opencode.json
   cat > "$CONFIG_DIR/opencode.json" << 'EOF'
@@ -143,39 +143,21 @@ EOF
 fi
 
 # ------------------------------------------------------------------
-# 步骤 4: 安装 unzip（Bun 安装脚本依赖）
+# 步骤 4: 检查前置依赖
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[4/7] 安装 unzip...${NC}"
+echo -e "${YELLOW}[4/8] 检查前置依赖...${NC}"
 
-install_unzip_if_missing() {
-  if command -v unzip &> /dev/null; then
-    return 0
-  fi
-  echo "正在安装 unzip..."
-  if command -v apt-get &> /dev/null; then
-    sudo -n apt-get install -y unzip 2>/dev/null || {
-      echo -e "${YELLOW}⚠ 需要 sudo 权限安装 unzip${NC}"
-      echo "  请手动执行: sudo apt-get install -y unzip"
-      echo "  然后在当前终端重新运行此脚本"
-      exit 1
-    }
-  elif command -v yum &> /dev/null; then
-    sudo -n yum install -y unzip 2>/dev/null || {
-      echo -e "${YELLOW}⚠ 需要 sudo 权限安装 unzip${NC}"
-      echo "  请手动执行: sudo yum install -y unzip"
-      exit 1
-    }
-  elif command -v brew &> /dev/null; then
-    brew install unzip
-  elif command -v apk &> /dev/null; then
-    apk add unzip
-  else
-    echo -e "${RED}✗ 无法自动安装 unzip，请手动安装后重试${NC}"
-    exit 1
-  fi
-}
-
-install_unzip_if_missing
+# Bun 安装脚本需要 unzip
+if ! command -v unzip &> /dev/null; then
+  echo -e "${RED}✗ 缺少 unzip，Bun 安装需要此工具${NC}"
+  echo ""
+  echo "  请手动安装后重新运行:"
+  echo "    sudo apt-get install -y unzip   # Debian/Ubuntu"
+  echo "    sudo yum install -y unzip       # CentOS/RHEL"
+  echo "    brew install unzip              # macOS"
+  echo ""
+  exit 1
+fi
 echo -e "${GREEN}✓ unzip 已就绪${NC}"
 
 # ------------------------------------------------------------------
@@ -223,7 +205,7 @@ if ! grep -q '\.bun/bin' "$HOME/.bashrc" 2>/dev/null && ! grep -q '\.bun/bin' "$
 fi
 
 # ------------------------------------------------------------------
-# 步骤 5: 安装 OpenCode
+# 步骤 6: 安装 OpenCode
 # ------------------------------------------------------------------
 echo -e "${YELLOW}[6/8] 安装 OpenCode...${NC}"
 
@@ -250,7 +232,7 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 步骤 6: 安装 oh-my-openagent 插件
+# 步骤 7: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
 echo -e "${YELLOW}[7/8] 安装 oh-my-openagent 插件...${NC}"
 
