@@ -148,6 +148,24 @@ fi
 echo -e "${YELLOW}[4/7] 安装 Bun 运行时...${NC}"
 
 install_bun() {
+  # Bun 安装脚本需要 unzip
+  if ! command -v unzip &> /dev/null; then
+    echo "正在安装 unzip..."
+    if command -v apt-get &> /dev/null; then
+      sudo apt-get install -y unzip
+    elif command -v yum &> /dev/null; then
+      sudo yum install -y unzip
+    elif command -v brew &> /dev/null; then
+      brew install unzip
+    elif command -v apk &> /dev/null; then
+      apk add unzip
+    else
+      echo -e "${RED}✗ 无法自动安装 unzip，请手动安装后重试${NC}"
+      exit 1
+    fi
+    echo -e "${GREEN}✓ unzip 安装成功${NC}"
+  fi
+
   echo "正在安装 Bun..."
   curl -fsSL https://bun.sh/install | bash
   if [ -f "$HOME/.bun/bin/bun" ]; then
