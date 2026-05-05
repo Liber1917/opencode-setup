@@ -153,9 +153,18 @@ install_unzip_if_missing() {
   fi
   echo "正在安装 unzip..."
   if command -v apt-get &> /dev/null; then
-    sudo apt-get install -y unzip
+    sudo -n apt-get install -y unzip 2>/dev/null || {
+      echo -e "${YELLOW}⚠ 需要 sudo 权限安装 unzip${NC}"
+      echo "  请手动执行: sudo apt-get install -y unzip"
+      echo "  然后在当前终端重新运行此脚本"
+      exit 1
+    }
   elif command -v yum &> /dev/null; then
-    sudo yum install -y unzip
+    sudo -n yum install -y unzip 2>/dev/null || {
+      echo -e "${YELLOW}⚠ 需要 sudo 权限安装 unzip${NC}"
+      echo "  请手动执行: sudo yum install -y unzip"
+      exit 1
+    }
   elif command -v brew &> /dev/null; then
     brew install unzip
   elif command -v apk &> /dev/null; then
@@ -172,7 +181,7 @@ echo -e "${GREEN}✓ unzip 已就绪${NC}"
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[5/7] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[5/8] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   if command -v bun &> /dev/null; then
