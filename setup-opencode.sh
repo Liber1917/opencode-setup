@@ -198,11 +198,16 @@ if ! command -v bun &> /dev/null; then
   export PATH="$HOME/.bun/bin:$PATH"
 fi
 
-# 如果用户 shell 配置中还没有 bun 路径，添加提示
-if ! grep -q '\.bun/bin' "$HOME/.bashrc" 2>/dev/null && ! grep -q '\.bun/bin' "$HOME/.zshrc" 2>/dev/null; then
-  echo -e "${BLUE}  提示: 建议将 Bun 加入 shell 配置:${NC}"
-  echo "    echo 'export PATH=\"\$HOME/.bun/bin:\$PATH\"' >> ~/.bashrc"
+# 如果 shell 配置中还没有 bun 路径，自动写入
+BUN_PATH_LINE='export PATH="$HOME/.bun/bin:$PATH"'
+if ! grep -q '\.bun/bin' "$HOME/.bashrc" 2>/dev/null; then
+  echo "" >> "$HOME/.bashrc"
+  echo "# Bun" >> "$HOME/.bashrc"
+  echo "$BUN_PATH_LINE" >> "$HOME/.bashrc"
+  echo -e "${GREEN}✓ Bun 路径已写入 ~/.bashrc${NC}"
 fi
+# 确保当前会话也能用
+export PATH="$HOME/.bun/bin:$PATH"
 
 # ------------------------------------------------------------------
 # 步骤 6: 安装 OpenCode
@@ -303,10 +308,7 @@ echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
 echo "  GSD 工作流:   $GSD_DIR"
 echo ""
 echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
-echo "  Bun 版本 opencode 已安装到: $HOME/.bun/bin/opencode"
-echo "  如果输入 'opencode' 仍报错 'node: not found'，说明 PATH 中 Windows npm 版本优先"
-echo "  在当前终端执行以下命令即可修复:"
-echo "    export PATH=\"$HOME/.bun/bin:\$PATH\""
-echo "  永久修复（加到 shell 配置）:"
-echo "    echo 'export PATH=\"\$HOME/.bun/bin:\$PATH\"' >> ~/.bashrc"
-echo ""
+echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
+echo "  如果输入 'opencode' 仍报错 'node: not found'，请执行:"
+echo "    source ~/.bashrc"
+echo "  或重启终端"
