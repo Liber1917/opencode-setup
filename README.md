@@ -171,7 +171,7 @@ GSD (Get Shit Done) 提供完整的项目生命周期管理：
 # 确保在 WSL 内执行
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
-bun install -g @opencode-ai/opencode
+bun install -g opencode-ai
 ```
 
 ### 插件不生效

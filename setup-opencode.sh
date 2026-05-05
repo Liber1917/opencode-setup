@@ -221,13 +221,13 @@ if [ -f "$HOME/.bun/bin/opencode" ]; then
   echo -e "${GREEN}✓ OpenCode 已安装 ($(opencode --version))${NC}"
 else
   echo "正在通过 Bun 安装 OpenCode..."
-  bun install -g @opencode-ai/opencode
+  bun install -g opencode-ai
 
   if [ -f "$HOME/.bun/bin/opencode" ]; then
     echo -e "${GREEN}✓ OpenCode 安装成功 ($(opencode --version))${NC}"
   else
     echo -e "${RED}✗ OpenCode 安装失败${NC}"
-    echo "  请手动安装: bun install -g @opencode-ai/opencode"
+    echo "  请手动安装: bun install -g opencode-ai"
     exit 1
   fi
 fi
