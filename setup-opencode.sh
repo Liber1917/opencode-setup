@@ -209,26 +209,30 @@ fi
 # ------------------------------------------------------------------
 echo -e "${YELLOW}[6/8] 安装 OpenCode...${NC}"
 
-if command -v opencode &> /dev/null; then
-  echo -e "${GREEN}✓ OpenCode 已安装 ($(opencode --version 2>/dev/null || echo 'ok'))${NC}"
+# 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
+export PATH="$HOME/.bun/bin:$PATH"
+
+if [ -f "$HOME/.bun/bin/opencode" ]; then
+  echo -e "${GREEN}✓ OpenCode 已安装 ($(opencode --version))${NC}"
 else
   echo "正在通过 Bun 安装 OpenCode..."
   bun install -g @opencode-ai/opencode
 
-  # 验证安装
-  if command -v opencode &> /dev/null; then
-    echo -e "${GREEN}✓ OpenCode 安装成功${NC}"
+  if [ -f "$HOME/.bun/bin/opencode" ]; then
+    echo -e "${GREEN}✓ OpenCode 安装成功 ($(opencode --version))${NC}"
   else
-    # 尝试通过 ~/.bun/bin 寻找
-    if [ -f "$HOME/.bun/bin/opencode" ]; then
-      export PATH="$HOME/.bun/bin:$PATH"
-      echo -e "${GREEN}✓ OpenCode 安装成功 ($(opencode --version))${NC}"
-    else
-      echo -e "${RED}✗ OpenCode 安装失败${NC}"
-      echo "  请手动安装: bun install -g @opencode-ai/opencode"
-      exit 1
-    fi
+    echo -e "${RED}✗ OpenCode 安装失败${NC}"
+    echo "  请手动安装: bun install -g @opencode-ai/opencode"
+    exit 1
   fi
+fi
+
+# 检查是否有 Windows npm 安装的 opencode 冲突
+WINDOWS_OPENCODE=$(command -v opencode 2>/dev/null || true)
+if [ -n "$WINDOWS_OPENCODE" ] && echo "$WINDOWS_OPENCODE" | grep -q "/mnt/"; then
+  echo -e "${YELLOW}⚠ 检测到 WSL 下存在 Windows npm 安装的 opencode${NC}"
+  echo "  当前优先级: $HOME/.bun/bin > $WINDOWS_OPENCODE"
+  echo "  如果输入 opencode 仍报错，请检查 PATH 顺序"
 fi
 
 # ------------------------------------------------------------------
@@ -299,6 +303,10 @@ echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
 echo "  GSD 工作流:   $GSD_DIR"
 echo ""
 echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
-echo "  确保在 WSL 内执行此脚本 (而非 Windows 侧)"
-echo "  使用 Bun 安装的 opencode 不会出现 'node: not found' 错误"
+echo "  Bun 版本 opencode 已安装到: $HOME/.bun/bin/opencode"
+echo "  如果输入 'opencode' 仍报错 'node: not found'，说明 PATH 中 Windows npm 版本优先"
+echo "  在当前终端执行以下命令即可修复:"
+echo "    export PATH=\"$HOME/.bun/bin:\$PATH\""
+echo "  永久修复（加到 shell 配置）:"
+echo "    echo 'export PATH=\"\$HOME/.bun/bin:\$PATH\"' >> ~/.bashrc"
 echo ""
