@@ -1,49 +1,73 @@
 # opencode-setup
 
-One-command setup for [OpenCode](https://opencode.ai) with oh-my-openagent, GSD workflow, and full skill ecosystem.
+一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、GSD 工作流和完整的 Agent 生态。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode-complete.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash
 ```
 
-Or clone and run:
+或克隆后运行：
 
 ```bash
 git clone https://github.com/Liber1917/opencode-setup.git
 cd opencode-setup
-./setup-opencode-complete.sh
+./setup-opencode.sh
 ```
 
-## What This Does
+## 特性
 
-Configures a production-ready OpenCode environment from scratch:
+- **Bun 运行时** — 无需预装 Node.js，自动安装 Bun，避免跨平台 PATH 问题
+- **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
+- **GSD 工作流** — 项目全生命周期管理
+- **零假设** — 不依赖任何预装工具（除 curl 和 git）
+
+## 安装效果
 
 ```
 ~/.config/opencode/
-├── opencode.json           ← provider + plugin config
-├── oh-my-openagent.json    ← agent model routing
-├── node_modules/           ← oh-my-openagent plugin
-├── get-shit-done/          ← GSD workflow (auto-cloned)
-└── skills/                 ← symlinked skill library
+├── opencode.json           ←  Provider + 插件配置
+├── oh-my-openagent.json    ←  Agent 模型路由
+├── node_modules/           ←  oh-my-openagent 插件
+├── get-shit-done/          ←  GSD 工作流（自动克隆）
+└── skills/                 ←  技能链接库
 
 ~/.claude/
-└── settings.json           ← hooks config
+└── settings.json           ←  Hooks 配置
 ```
 
-**Zero assumptions.** No pre-installed skills, no GSD, no npm — the script handles everything.
+## 使用方式
 
-## Scripts
+### 标准安装
 
-| Script | Purpose |
-|--------|---------|
-| `setup-opencode-complete.sh` | Full install from scratch (recommended) |
-| `setup-opencode-portable.sh` | Custom paths via env vars |
-| `setup-opencode.sh` | Quick setup for standard environments |
-| `backup-opencode-config.sh` | Backup existing config before changes |
+```bash
+curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash
+```
 
-## Configuration
+安装脚本会自动：
+1. 检测已有配置并备份
+2. 生成 opencode.json / oh-my-openagent.json / Claude settings
+3. 安装 Bun 运行时（如未安装）
+4. 通过 Bun 安装 OpenCode
+5. 安装 oh-my-openagent 插件
+6. 安装 GSD 工作流
 
-After running the setup script, edit your API key:
+### 自定义路径
+
+```bash
+export OPENCODE_CONFIG_DIR=/custom/path/opencode
+export CLAUDE_CONFIG_DIR=/custom/path/claude
+./setup-opencode.sh
+```
+
+### 备份
+
+```bash
+./backup-opencode-config.sh
+```
+
+## 配置
+
+### API 密钥
 
 ```bash
 nano ~/.config/opencode/opencode.json
@@ -54,7 +78,7 @@ nano ~/.config/opencode/opencode.json
   "provider": {
     "anthropic": {
       "options": {
-        "apiKey": "<your-key>",
+        "apiKey": "sk-your-key-here",
         "baseURL": "https://api.anthropic.com"
       }
     }
@@ -62,99 +86,122 @@ nano ~/.config/opencode/opencode.json
 }
 ```
 
-For proxy endpoints (e.g. claude-code.club), change `baseURL`.
-
-### Model Routing
-
-Edit `~/.config/opencode/oh-my-openagent.json` to assign different models per agent/category:
+**使用 DeepSeek**（Anthropic 兼容接口）：
 
 ```json
 {
-  "agents": {
-    "oracle": {"model": "anthropic/claude-opus-4-6"},
-    "explore": {"model": "anthropic/claude-sonnet-4-6"},
-    "sisyphus-junior": {"model": "anthropic/claude-sonnet-4-6"}
-  },
-  "categories": {
-    "ultrabrain": {"model": "anthropic/claude-opus-4-6"},
-    "quick": {"model": "anthropic/claude-haiku-4-6"}
+  "provider": {
+    "anthropic": {
+      "options": {
+        "apiKey": "sk-your-deepseek-key",
+        "baseURL": "https://api.deepseek.com/anthropic"
+      }
+    }
   }
 }
 ```
 
-## Custom Paths
+### 模型路由
 
-Override default locations via environment variables:
+编辑 `~/.config/opencode/oh-my-openagent.json` 调整每个 Agent/Category 使用的模型：
 
-```bash
-export OPENCODE_CONFIG_DIR=/custom/opencode
-export CLAUDE_CONFIG_DIR=/custom/claude
-export ORCHESTRA_SKILLS_DIR=/custom/orchestra
-export AGENTS_SKILLS_DIR=/custom/agents
-./setup-opencode-portable.sh
+```json
+{
+  "agents": {
+    "oracle": {"model": "deepseek/deepseek-v4-flash"},
+    "explore": {"model": "deepseek/deepseek-v4-flash"},
+    "sisyphus-junior": {"model": "deepseek/deepseek-v4-flash"}
+  },
+  "categories": {
+    "ultrabrain": {"model": "deepseek/deepseek-v4-flash"},
+    "quick": {"model": "deepseek/deepseek-v4-flash"}
+  }
+}
 ```
 
-## What Gets Installed
+## Agent 一览
 
-### Agents (10)
-
-| Agent | Role |
+| Agent | 职责 |
 |-------|------|
-| hephaestus | Build and implement |
-| oracle | Architecture, debugging, high-IQ reasoning |
-| librarian | External docs, OSS code search |
-| explore | Codebase pattern discovery |
-| multimodal-looker | PDF/image analysis |
-| prometheus | Planning and strategy |
-| metis | Pre-planning consultant |
-| momus | Plan review and critique |
-| atlas | Knowledge management |
-| sisyphus-junior | Focused task execution |
+| **hephaestus** | 构建与实现 |
+| **oracle** | 架构、调试、高难度推理 |
+| **librarian** | 外部文档、OSS 代码搜索 |
+| **explore** | 代码库模式发现 |
+| **multimodal-looker** | PDF/图片分析 |
+| **prometheus** | 规划与策略 |
+| **metis** | 预规划顾问 |
+| **momus** | 计划评审 |
+| **atlas** | 知识管理 |
+| **sisyphus-junior** | 专注任务执行 |
 
-### Categories (8)
+## Category 一览
 
-| Category | Domain |
-|----------|--------|
-| visual-engineering | Frontend, UI/UX, CSS |
-| ultrabrain | Hard logic, algorithms |
-| deep | Autonomous problem-solving |
-| artistry | Creative/unconventional approaches |
-| quick | Single-file trivial changes |
-| unspecified-low | Low effort misc |
-| unspecified-high | High effort misc |
-| writing | Documentation, prose |
+| Category | 适用场景 |
+|----------|---------|
+| visual-engineering | 前端、UI/UX、CSS |
+| ultrabrain | 复杂逻辑、算法 |
+| deep | 自主问题解决 |
+| artistry | 创意/非常规方案 |
+| quick | 单文件简单修改 |
+| unspecified-low | 低难度杂项 |
+| unspecified-high | 高难度杂项 |
+| writing | 文档、写作 |
 
-### GSD Workflow
+## GSD 工作流
 
-Automatically installed. Provides project lifecycle management:
-- `/gsd-new-project` → Initialize project
-- `/gsd-plan-phase` → Create execution plans
-- `/gsd-execute-phase` → Execute with atomic commits
-- `/gsd-progress` → Track status
-- `/gsd-help` → Full command list
+GSD (Get Shit Done) 提供完整的项目生命周期管理：
 
-## Requirements
+| 命令 | 功能 |
+|------|------|
+| `/gsd-new-project` | 初始化项目 |
+| `/gsd-plan-phase` | 创建执行计划 |
+| `/gsd-execute-phase` | 带原子提交的执行 |
+| `/gsd-progress` | 进度跟踪 |
+| `/gsd-help` | 全部命令列表 |
 
-- OpenCode ≥ 1.4.6
-- Node.js / npm (auto-installed if missing)
-- git (for GSD clone)
+## 常见问题
 
-## Troubleshooting
+### `node: not found`
 
-**"未检测到 OpenCode 环境"** — Run inside an OpenCode terminal session.
+**原因**：在 WSL 中运行了 Windows npm 安装的 opencode。
 
-**npm install fails** — Install Node.js manually:
+**解决**：用 Bun 在 **WSL 内**重新安装：
+
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
+# 确保在 WSL 内执行
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+bun install -g @opencode-ai/opencode
 ```
 
-**GSD clone fails** — Clone manually:
+### 插件不生效
+
+重启 OpenCode 会话后生效。
+
+### GSD 克隆失败
+
 ```bash
 git clone https://github.com/OpenAgentsInc/gsd.git ~/.config/opencode/get-shit-done
 ```
 
-**Config not taking effect** — Restart OpenCode after changes.
+### "未检测到 OpenCode 环境"
+
+在 OpenCode 终端会话内运行命令。
+
+## 环境要求
+
+- curl（安装 Bun 用）
+- git（安装 GSD 用）
+- 网络连接
+
+Bun 和 OpenCode 由脚本自动安装。
+
+## 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `setup-opencode.sh` | **统一安装脚本（推荐）** |
+| `backup-opencode-config.sh` | 配置文件备份 |
 
 ## License
 

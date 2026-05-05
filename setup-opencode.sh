@@ -1,32 +1,73 @@
 #!/bin/bash
+# ============================================================================
 # OpenCode 一键配置脚本
-# 自动配置 OpenCode 环境，包括 oh-my-openagent 插件和所有相关设置
-
+# 使用 Bun 作为运行时，自动安装所有依赖
+# 支持 Linux / macOS / WSL
+# ============================================================================
 set -e
 
-# 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-echo -e "${GREEN}=== OpenCode 一键配置脚本 ===${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}  OpenCode 一键配置脚本 (Bun 版)${NC}"
+echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# 配置目录
-CONFIG_DIR="$HOME/.config/opencode"
-CLAUDE_DIR="$HOME/.claude"
-ORCHESTRA_DIR="$HOME/.orchestra"
-AGENTS_DIR="$HOME/.agents"
+# ------------------------------------------------------------------
+# 目录配置（支持环境变量覆盖）
+# ------------------------------------------------------------------
+CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
-echo -e "${YELLOW}步骤 1/8: 创建配置目录${NC}"
+echo -e "${BLUE}目标目录:${NC}"
+echo "  OpenCode: $CONFIG_DIR"
+echo "  Claude:   $CLAUDE_DIR"
+echo ""
+
+# ------------------------------------------------------------------
+# 步骤 1: 检测已有配置
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[1/7] 检测已有配置...${NC}"
+
+if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
+  echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
+  echo -n "是否备份后重新生成? (y/n) [n]: "
+  read -r overwrite
+  overwrite=${overwrite:-n}
+  if [[ $overwrite =~ ^[Yy]$ ]]; then
+    backup_dir="$HOME/opencode-backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    [ -f "$CONFIG_DIR/opencode.json" ]         && cp "$CONFIG_DIR/opencode.json"         "$backup_dir/"
+    [ -f "$CONFIG_DIR/oh-my-openagent.json" ]   && cp "$CONFIG_DIR/oh-my-openagent.json" "$backup_dir/"
+    [ -f "$CONFIG_DIR/package.json" ]           && cp "$CONFIG_DIR/package.json"         "$backup_dir/"
+    echo -e "${GREEN}✓ 已备份到: $backup_dir${NC}"
+  else
+    echo "跳过配置生成，使用现有配置。"
+    SKIP_CONFIG=1
+  fi
+fi
+
+# ------------------------------------------------------------------
+# 步骤 2: 创建目录结构
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[2/7] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
+mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
-mkdir -p "$ORCHESTRA_DIR/skills"
-mkdir -p "$AGENTS_DIR/skills"
+echo -e "${GREEN}✓ 目录已创建${NC}"
 
-echo -e "${YELLOW}步骤 2/8: 配置 opencode.json${NC}"
-cat > "$CONFIG_DIR/opencode.json" << 'EOF'
+# ------------------------------------------------------------------
+# 步骤 3: 生成配置文件
+# ------------------------------------------------------------------
+if [ "${SKIP_CONFIG:-0}" != "1" ]; then
+  echo -e "${YELLOW}[3/7] 生成配置文件...${NC}"
+
+  # opencode.json
+  cat > "$CONFIG_DIR/opencode.json" << 'EOF'
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
@@ -42,129 +83,51 @@ cat > "$CONFIG_DIR/opencode.json" << 'EOF'
   },
   "permission": {
     "read": {
-      "~/.config/opencode/get-shit-done/*": "allow"
+      "~/.config/opencode/*": "allow",
+      "~/.claude/*": "allow"
     },
     "external_directory": {
-      "~/.config/opencode/get-shit-done/*": "allow"
+      "~/.config/opencode/*": "allow",
+      "~/.claude/*": "allow"
     }
   }
 }
 EOF
+  echo -e "${GREEN}  ✓ opencode.json${NC}"
 
-echo -e "${YELLOW}步骤 3/8: 配置 oh-my-openagent.json${NC}"
-cat > "$CONFIG_DIR/oh-my-openagent.json" << 'EOF'
+  # oh-my-openagent.json
+  cat > "$CONFIG_DIR/oh-my-openagent.json" << 'EOF'
 {
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
   "agents": {
-    "hephaestus": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "oracle": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "librarian": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "explore": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "multimodal-looker": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "prometheus": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "metis": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "momus": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "atlas": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "sisyphus-junior": {
-      "model": "anthropic/claude-sonnet-4-6"
-    }
+    "hephaestus": {"model": "anthropic/claude-sonnet-4-6"},
+    "oracle": {"model": "anthropic/claude-sonnet-4-6"},
+    "librarian": {"model": "anthropic/claude-sonnet-4-6"},
+    "explore": {"model": "anthropic/claude-sonnet-4-6"},
+    "multimodal-looker": {"model": "anthropic/claude-sonnet-4-6"},
+    "prometheus": {"model": "anthropic/claude-sonnet-4-6"},
+    "metis": {"model": "anthropic/claude-sonnet-4-6"},
+    "momus": {"model": "anthropic/claude-sonnet-4-6"},
+    "atlas": {"model": "anthropic/claude-sonnet-4-6"},
+    "sisyphus-junior": {"model": "anthropic/claude-sonnet-4-6"}
   },
   "categories": {
-    "visual-engineering": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "ultrabrain": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "deep": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "artistry": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "quick": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "unspecified-low": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "unspecified-high": {
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "writing": {
-      "model": "anthropic/claude-sonnet-4-6"
-    }
+    "visual-engineering": {"model": "anthropic/claude-sonnet-4-6"},
+    "ultrabrain": {"model": "anthropic/claude-sonnet-4-6"},
+    "deep": {"model": "anthropic/claude-sonnet-4-6"},
+    "artistry": {"model": "anthropic/claude-sonnet-4-6"},
+    "quick": {"model": "anthropic/claude-sonnet-4-6"},
+    "unspecified-low": {"model": "anthropic/claude-sonnet-4-6"},
+    "unspecified-high": {"model": "anthropic/claude-sonnet-4-6"},
+    "writing": {"model": "anthropic/claude-sonnet-4-6"}
   }
 }
 EOF
+  echo -e "${GREEN}  ✓ oh-my-openagent.json${NC}"
 
-echo -e "${YELLOW}步骤 4/8: 检查并安装 npm${NC}"
-if ! command -v npm &> /dev/null; then
-    echo -e "${YELLOW}npm 未安装,尝试安装...${NC}"
-    if command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y nodejs npm
-    elif command -v yum &> /dev/null; then
-        sudo yum install -y nodejs npm
-    elif command -v brew &> /dev/null; then
-        brew install node
-    else
-        echo -e "${RED}无法自动安装 npm,请手动安装 Node.js${NC}"
-        exit 1
-    fi
-
-    # 验证安装是否成功
-    if ! command -v npm &> /dev/null; then
-        echo -e "${RED}✗ npm 安装失败${NC}"
-        echo "请手动安装 Node.js 和 npm 后重新运行此脚本"
-        exit 1
-    fi
-    echo "✓ npm 安装成功"
-fi
-
-echo -e "${YELLOW}步骤 5/8: 安装 OpenCode${NC}"
-if ! command -v opencode &> /dev/null; then
-    echo "正在安装 OpenCode..."
-    npm install -g opencode-ai
-
-    if command -v opencode &> /dev/null; then
-        echo "✓ OpenCode 安装成功"
-        opencode --version
-    else
-        echo -e "${RED}✗ OpenCode 安装失败${NC}"
-        echo "请手动安装: npm install -g opencode-ai"
-        exit 1
-    fi
-else
-    echo "✓ OpenCode 已安装"
-    opencode --version
-fi
-
-echo -e "${YELLOW}步骤 6/8: 安装 oh-my-openagent 插件${NC}"
-cd "$CONFIG_DIR"
-if [ ! -d "node_modules" ]; then
-    npm install @opencode-ai/plugin@1.4.6
-fi
-
-echo -e "${YELLOW}步骤 7/8: 配置 Claude 设置${NC}"
-cat > "$CLAUDE_DIR/settings.json" << 'EOF'
+  # Claude settings
+  if [ ! -f "$CLAUDE_DIR/settings.json" ]; then
+    cat > "$CLAUDE_DIR/settings.json" << 'EOF'
 {
   "hooks": {
     "SessionStart": [],
@@ -173,47 +136,146 @@ cat > "$CLAUDE_DIR/settings.json" << 'EOF'
   }
 }
 EOF
-
-echo -e "${YELLOW}步骤 8/8: 创建技能符号链接${NC}"
-mkdir -p "$CONFIG_DIR/skills"
-skill_count=0
-if [ -d "$ORCHESTRA_DIR/skills" ]; then
-    for skill_dir in "$ORCHESTRA_DIR/skills"/*; do
-        if [ -d "$skill_dir" ]; then
-            skill_name=$(basename "$skill_dir")
-            if [ ! -e "$CONFIG_DIR/skills/$skill_name" ]; then
-                if ln -s "$skill_dir" "$CONFIG_DIR/skills/$skill_name" 2>/dev/null; then
-                    ((skill_count++))
-                else
-                    echo -e "${YELLOW}警告: 无法创建符号链接 $skill_name${NC}"
-                fi
-            fi
-        fi
-    done
+    echo -e "${GREEN}  ✓ settings.json (Claude)${NC}"
+  else
+    echo -e "${BLUE}  - settings.json 已存在，跳过${NC}"
+  fi
 fi
 
-echo "创建了 $skill_count 个技能符号链接"
+# ------------------------------------------------------------------
+# 步骤 4: 安装 Bun 运行时
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[4/7] 安装 Bun 运行时...${NC}"
 
+install_bun() {
+  echo "正在安装 Bun..."
+  curl -fsSL https://bun.sh/install | bash
+  if [ -f "$HOME/.bun/bin/bun" ]; then
+    export PATH="$HOME/.bun/bin:$PATH"
+    echo -e "${GREEN}✓ Bun 安装成功 ($(bun --version))${NC}"
+  else
+    echo -e "${RED}✗ Bun 安装失败，请手动安装: curl -fsSL https://bun.sh/install | bash${NC}"
+    exit 1
+  fi
+}
+
+if command -v bun &> /dev/null; then
+  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+elif [ -f "$HOME/.bun/bin/bun" ]; then
+  export PATH="$HOME/.bun/bin:$PATH"
+  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+elif [ -f "/usr/local/bin/bun" ]; then
+  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+else
+  install_bun
+fi
+
+# 确保 bun 在 PATH 中
+if ! command -v bun &> /dev/null; then
+  export PATH="$HOME/.bun/bin:$PATH"
+fi
+
+# 如果用户 shell 配置中还没有 bun 路径，添加提示
+if ! grep -q '\.bun/bin' "$HOME/.bashrc" 2>/dev/null && ! grep -q '\.bun/bin' "$HOME/.zshrc" 2>/dev/null; then
+  echo -e "${BLUE}  提示: 建议将 Bun 加入 shell 配置:${NC}"
+  echo "    echo 'export PATH=\"\$HOME/.bun/bin:\$PATH\"' >> ~/.bashrc"
+fi
+
+# ------------------------------------------------------------------
+# 步骤 5: 安装 OpenCode
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[5/7] 安装 OpenCode...${NC}"
+
+if command -v opencode &> /dev/null; then
+  echo -e "${GREEN}✓ OpenCode 已安装 ($(opencode --version 2>/dev/null || echo 'ok'))${NC}"
+else
+  echo "正在通过 Bun 安装 OpenCode..."
+  bun install -g @opencode-ai/opencode
+
+  # 验证安装
+  if command -v opencode &> /dev/null; then
+    echo -e "${GREEN}✓ OpenCode 安装成功${NC}"
+  else
+    # 尝试通过 ~/.bun/bin 寻找
+    if [ -f "$HOME/.bun/bin/opencode" ]; then
+      export PATH="$HOME/.bun/bin:$PATH"
+      echo -e "${GREEN}✓ OpenCode 安装成功 ($(opencode --version))${NC}"
+    else
+      echo -e "${RED}✗ OpenCode 安装失败${NC}"
+      echo "  请手动安装: bun install -g @opencode-ai/opencode"
+      exit 1
+    fi
+  fi
+fi
+
+# ------------------------------------------------------------------
+# 步骤 6: 安装 oh-my-openagent 插件
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[6/7] 安装 oh-my-openagent 插件...${NC}"
+
+cd "$CONFIG_DIR"
+if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
+  bun add oh-my-openagent@latest 2>&1 | tail -3
+  echo -e "${GREEN}✓ oh-my-openagent 插件安装完成${NC}"
+else
+  echo -e "${GREEN}✓ oh-my-openagent 插件已存在${NC}"
+fi
+
+# ------------------------------------------------------------------
+# 步骤 7: 安装 GSD 工作流（可选）
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[7/7] 安装 GSD 工作流...${NC}"
+
+GSD_DIR="$CONFIG_DIR/get-shit-done"
+if [ ! -d "$GSD_DIR" ]; then
+  if command -v git &> /dev/null; then
+    echo "正在克隆 GSD 仓库..."
+    git clone https://github.com/OpenAgentsInc/gsd.git "$GSD_DIR" 2>/dev/null || \
+    git clone https://github.com/OpenAgentsInc/get-shit-done.git "$GSD_DIR" 2>/dev/null || \
+    echo -e "${YELLOW}⚠ GSD 克隆失败，可稍后手动安装${NC}"
+
+    if [ -d "$GSD_DIR" ]; then
+      echo -e "${GREEN}✓ GSD 安装完成${NC}"
+    fi
+  else
+    echo -e "${YELLOW}⚠ git 未安装，跳过 GSD${NC}"
+    echo "  安装 git 后手动执行:"
+    echo "    git clone https://github.com/OpenAgentsInc/gsd.git $GSD_DIR"
+  fi
+else
+  echo -e "${GREEN}✓ GSD 已存在${NC}"
+fi
+
+# ------------------------------------------------------------------
+# 完成
+# ------------------------------------------------------------------
 echo ""
-echo -e "${GREEN}=== 配置完成 ===${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}  OpenCode 配置完成!${NC}"
+echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "${YELLOW}下一步操作:${NC}"
-echo "1. 编辑 $CONFIG_DIR/opencode.json"
-echo "   - 替换 YOUR_API_KEY_HERE 为你的 Anthropic API 密钥"
-echo "   - 如果使用代理,修改 baseURL"
+echo -e "${YELLOW}下一步:${NC}"
 echo ""
-echo "2. 根据需要调整模型配置:"
-echo "   - 编辑 $CONFIG_DIR/oh-my-openagent.json"
-echo "   - 可以为不同的 agent 和 category 配置不同的模型"
+echo "  1. 编辑 API 密钥:"
+echo "     $EDITOR $CONFIG_DIR/opencode.json"
+echo "     将 YOUR_API_KEY_HERE 替换为你的 API 密钥"
 echo ""
-echo "3. 现在可以直接运行 opencode 命令开始使用"
+echo "  2. 如使用 DeepSeek 等兼容 API，修改 baseURL:"
+echo '     "baseURL": "https://api.deepseek.com/anthropic"'
 echo ""
-echo -e "${GREEN}配置文件位置:${NC}"
-echo "  - OpenCode: $CONFIG_DIR/opencode.json"
-echo "  - Agents: $CONFIG_DIR/oh-my-openagent.json"
-echo "  - Claude: $CLAUDE_DIR/settings.json"
-echo "  - Skills: $CONFIG_DIR/skills/"
+echo "  3. 调整模型路由（可选）:"
+echo "     $EDITOR $CONFIG_DIR/oh-my-openagent.json"
 echo ""
-echo -e "${BLUE}提示:${NC}"
-echo "  - OpenCode 已成功安装并配置"
-echo "  - 运行 'opencode skill list' 查看可用技能"
+echo "  4. 运行 OpenCode:"
+echo "     opencode"
+echo ""
+echo -e "${BLUE}配置文件位置:${NC}"
+echo "  OpenCode:     $CONFIG_DIR/opencode.json"
+echo "  模型路由:     $CONFIG_DIR/oh-my-openagent.json"
+echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
+echo "  GSD 工作流:   $GSD_DIR"
+echo ""
+echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
+echo "  确保在 WSL 内执行此脚本 (而非 Windows 侧)"
+echo "  使用 Bun 安装的 opencode 不会出现 'node: not found' 错误"
+echo ""
