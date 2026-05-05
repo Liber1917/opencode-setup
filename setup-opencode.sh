@@ -210,11 +210,6 @@ ensure_bun() {
 }
 
 ensure_bun
-elif [ -f "/usr/local/bin/bun" ]; then
-  echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
-else
-  install_bun
-fi
 
 # 确保 bun 在 PATH 中
 if ! command -v bun &> /dev/null; then
