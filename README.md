@@ -101,9 +101,11 @@ nano ~/.config/opencode/opencode.json
 }
 ```
 
-### 模型路由
+### 模型路由（可选）
 
-编辑 `~/.config/opencode/oh-my-openagent.json` 调整每个 Agent/Category 使用的模型：
+oh-my-openagent 使用源码内置的默认模型 + 回退链，开箱即用。
+
+如需自定义，编辑 `~/.config/opencode/oh-my-openagent.json`，为 agent 添加 `model` 字段：
 
 ```json
 {
@@ -111,12 +113,13 @@ nano ~/.config/opencode/opencode.json
     "oracle": {"model": "deepseek/deepseek-v4-flash"},
     "explore": {"model": "deepseek/deepseek-v4-flash"},
     "sisyphus-junior": {"model": "deepseek/deepseek-v4-flash"}
-  },
-  "categories": {
-    "ultrabrain": {"model": "deepseek/deepseek-v4-flash"},
-    "quick": {"model": "deepseek/deepseek-v4-flash"}
   }
 }
+```
+
+不设 model = 使用内置默认，优先级：
+```
+agent model > category model > 用户 fallback_models > 源码内置回退链 > OpenCode 默认
 ```
 
 ## Agent 一览

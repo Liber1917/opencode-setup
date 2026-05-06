@@ -280,6 +280,10 @@ else
   echo -e "${GREEN}✓ GSD 已存在${NC}"
 fi
 
+# 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
+# shellcheck source=/dev/null
+. "$HOME/.bashrc" 2>/dev/null || true
+
 # ------------------------------------------------------------------
 # 完成
 # ------------------------------------------------------------------
@@ -299,6 +303,8 @@ echo '     "baseURL": "https://api.deepseek.com/anthropic"'
 echo ""
 echo "  3. 调整模型路由（可选）:"
 echo "     $EDITOR $CONFIG_DIR/oh-my-openagent.json"
+echo "     为 agent 添加 model 字段即可覆盖默认模型，例如:"
+echo '     "oracle": {"model": "deepseek/deepseek-v4-flash"}'
 echo ""
 echo "  4. 运行 OpenCode:"
 echo "     opencode"
