@@ -96,34 +96,36 @@ EOF
   echo -e "${GREEN}  ✓ opencode.json${NC}"
 
   # oh-my-openagent.json
+  # 只注册 agent/category 结构，不设 model = 使用源码内置默认模型 + 回退链
+  # 需要自定义时取消注释或添加 model 字段
   cat > "$CONFIG_DIR/oh-my-openagent.json" << 'EOF'
 {
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
   "agents": {
-    "hephaestus": {"model": "anthropic/claude-sonnet-4-6"},
-    "oracle": {"model": "anthropic/claude-sonnet-4-6"},
-    "librarian": {"model": "anthropic/claude-sonnet-4-6"},
-    "explore": {"model": "anthropic/claude-sonnet-4-6"},
-    "multimodal-looker": {"model": "anthropic/claude-sonnet-4-6"},
-    "prometheus": {"model": "anthropic/claude-sonnet-4-6"},
-    "metis": {"model": "anthropic/claude-sonnet-4-6"},
-    "momus": {"model": "anthropic/claude-sonnet-4-6"},
-    "atlas": {"model": "anthropic/claude-sonnet-4-6"},
-    "sisyphus-junior": {"model": "anthropic/claude-sonnet-4-6"}
+    "hephaestus": {},
+    "oracle": {},
+    "librarian": {},
+    "explore": {},
+    "multimodal-looker": {},
+    "prometheus": {},
+    "metis": {},
+    "momus": {},
+    "atlas": {},
+    "sisyphus-junior": {}
   },
   "categories": {
-    "visual-engineering": {"model": "anthropic/claude-sonnet-4-6"},
-    "ultrabrain": {"model": "anthropic/claude-sonnet-4-6"},
-    "deep": {"model": "anthropic/claude-sonnet-4-6"},
-    "artistry": {"model": "anthropic/claude-sonnet-4-6"},
-    "quick": {"model": "anthropic/claude-sonnet-4-6"},
-    "unspecified-low": {"model": "anthropic/claude-sonnet-4-6"},
-    "unspecified-high": {"model": "anthropic/claude-sonnet-4-6"},
-    "writing": {"model": "anthropic/claude-sonnet-4-6"}
+    "visual-engineering": {},
+    "ultrabrain": {},
+    "deep": {},
+    "artistry": {},
+    "quick": {},
+    "unspecified-low": {},
+    "unspecified-high": {},
+    "writing": {}
   }
 }
 EOF
-  echo -e "${GREEN}  ✓ oh-my-openagent.json${NC}"
+  echo -e "${GREEN}  ✓ oh-my-openagent.json（agent 已注册，model 留空=内置默认）${NC}"
 
   # Claude settings
   if [ ! -f "$CLAUDE_DIR/settings.json" ]; then
