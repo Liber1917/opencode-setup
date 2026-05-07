@@ -164,16 +164,30 @@ echo -e "${GREEN}✓ unzip 已就绪${NC}"
 
 # OpenCode 引导脚本需要 node（找到原生二进制后会切换到原生运行）
 if ! command -v node &> /dev/null; then
-  echo -e "${YELLOW}⚠ 缺少 node，OpenCode 引导需要${NC}"
-  echo ""
-  echo "  请手动安装后重新运行:"
-  echo "    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
-  echo "    sudo apt-get install -y nodejs"
-  echo "    # 或使用 nvm: https://github.com/nvm-sh/nvm"
-  echo ""
-  exit 1
+  echo -e "${YELLOW}⚠ 缺少 node，正在安装...${NC}"
+  if command -v apt-get &> /dev/null; then
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
+    sudo apt-get install -y nodejs
+  elif command -v yum &> /dev/null; then
+    curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
+    sudo yum install -y nodejs
+  elif command -v brew &> /dev/null; then
+    brew install node
+  else
+    echo -e "${RED}✗ 无法自动安装 node${NC}"
+    echo "  请手动安装后重新运行"
+    exit 1
+  fi
+
+  if command -v node &> /dev/null; then
+    echo -e "${GREEN}✓ node 安装成功 ($(node --version))${NC}"
+  else
+    echo -e "${RED}✗ node 安装失败，请手动安装${NC}"
+    exit 1
+  fi
+else
+  echo -e "${GREEN}✓ node 已就绪 ($(node --version))${NC}"
 fi
-echo -e "${GREEN}✓ node 已就绪${NC}"
 
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
