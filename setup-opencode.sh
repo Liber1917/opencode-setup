@@ -162,6 +162,19 @@ if ! command -v unzip &> /dev/null; then
 fi
 echo -e "${GREEN}✓ unzip 已就绪${NC}"
 
+# OpenCode 引导脚本需要 node（找到原生二进制后会切换到原生运行）
+if ! command -v node &> /dev/null; then
+  echo -e "${YELLOW}⚠ 缺少 node，OpenCode 引导需要${NC}"
+  echo ""
+  echo "  请手动安装后重新运行:"
+  echo "    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
+  echo "    sudo apt-get install -y nodejs"
+  echo "    # 或使用 nvm: https://github.com/nvm-sh/nvm"
+  echo ""
+  exit 1
+fi
+echo -e "${GREEN}✓ node 已就绪${NC}"
+
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
 # ------------------------------------------------------------------
