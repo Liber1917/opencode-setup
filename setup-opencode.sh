@@ -151,16 +151,24 @@ echo -e "${YELLOW}[4/8] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
-  echo -e "${RED}✗ 缺少 unzip，Bun 安装需要此工具${NC}"
-  echo ""
-  echo "  请手动安装后重新运行:"
-  echo "    sudo apt-get install -y unzip   # Debian/Ubuntu"
-  echo "    sudo yum install -y unzip       # CentOS/RHEL"
-  echo "    brew install unzip              # macOS"
-  echo ""
-  exit 1
+  echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
+  if command -v apt-get &> /dev/null; then
+    sudo apt-get install -y unzip
+  elif command -v yum &> /dev/null; then
+    sudo yum install -y unzip
+  elif command -v brew &> /dev/null; then
+    brew install unzip
+  elif command -v apk &> /dev/null; then
+    apk add unzip
+  else
+    echo -e "${RED}✗ 无法自动安装 unzip${NC}"
+    echo "  请手动安装后重新运行"
+    exit 1
+  fi
+  echo -e "${GREEN}✓ unzip 安装成功${NC}"
+else
+  echo -e "${GREEN}✓ unzip 已就绪${NC}"
 fi
-echo -e "${GREEN}✓ unzip 已就绪${NC}"
 
 # OpenCode 引导脚本需要 node（找到原生二进制后会切换到原生运行）
 if ! command -v node &> /dev/null; then
