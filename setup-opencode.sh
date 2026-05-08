@@ -67,11 +67,12 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   echo -e "${YELLOW}[3/8] 生成配置文件...${NC}"
 
   # opencode.json
-  cat > "$CONFIG_DIR/opencode.json" << 'EOF'
+  cat > "$CONFIG_DIR/opencode.json" << EOF
 {
-  "$schema": "https://opencode.ai/config.json",
+  "\$schema": "https://opencode.ai/config.json",
   "plugin": [
-    "oh-my-openagent@latest"
+    "oh-my-openagent@latest",
+    "superpowers@git+https://github.com/obra/superpowers.git"
   ],
   "provider": {
     "anthropic": {
@@ -343,6 +344,9 @@ echo '     "oracle": {"model": "deepseek/deepseek-v4-flash"}'
 echo ""
 echo "  4. 运行 OpenCode:"
 echo "     opencode"
+echo ""
+echo "  5. 查看已安装的 skills:"
+echo '     skill({name: "superpowers/brainstorming"})'
 echo ""
 echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"

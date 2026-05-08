@@ -25,9 +25,9 @@ cd opencode-setup
 
 ```
 ~/.config/opencode/
-├── opencode.json           ←  Provider + 插件配置
+├── opencode.json           ←  Provider + 插件配置（oh-my-openagent + superpowers）
 ├── oh-my-openagent.json    ←  Agent 模型路由
-├── node_modules/           ←  oh-my-openagent 插件
+├── node_modules/           ←  oh-my-openagent + superpowers 插件
 ├── get-shit-done/          ←  GSD 工作流（自动克隆）
 └── skills/                 ←  技能链接库
 
