@@ -292,28 +292,30 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 步骤 8: 安装 GSD 工作流（可选）
+# 步骤 8: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[8/8] 安装 GSD 工作流...${NC}"
+echo -e "${YELLOW}[8/8] 安装 GSD Core 工作流...${NC}"
 
-GSD_DIR="$CONFIG_DIR/get-shit-done"
-if [ ! -d "$GSD_DIR" ]; then
-  if command -v git &> /dev/null; then
-    echo "正在克隆 GSD 仓库..."
-    git clone https://github.com/OpenAgentsInc/gsd.git "$GSD_DIR" 2>/dev/null || \
-    git clone https://github.com/OpenAgentsInc/get-shit-done.git "$GSD_DIR" 2>/dev/null || \
-    echo -e "${YELLOW}⚠ GSD 克隆失败，可稍后手动安装${NC}"
-
-    if [ -d "$GSD_DIR" ]; then
-      echo -e "${GREEN}✓ GSD 安装完成${NC}"
-    fi
-  else
-    echo -e "${YELLOW}⚠ git 未安装，跳过 GSD${NC}"
-    echo "  安装 git 后手动执行:"
-    echo "    git clone https://github.com/OpenAgentsInc/gsd.git $GSD_DIR"
-  fi
+# 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
+if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
+  echo -e "${GREEN}✓ GSD Core 命令已存在${NC}"
 else
-  echo -e "${GREEN}✓ GSD 已存在${NC}"
+  if command -v npx &> /dev/null; then
+    echo "正在安装 GSD Core（官方继任项目，原生支持 OpenCode）..."
+    echo ""
+
+    # GSD Core 官方安装命令
+    # 自动检测 OpenCode 配置目录，安装 agent 和 command 到对应位置
+    npx --yes @opengsd/gsd-core@latest --opencode --global
+
+    echo ""
+    echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
+    echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令${NC}"
+  else
+    echo -e "${YELLOW}⚠ npx 未安装，跳过 GSD Core${NC}"
+    echo "  确保 Node.js 已安装，然后手动执行:"
+    echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
+  fi
 fi
 
 # 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
