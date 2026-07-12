@@ -18,7 +18,7 @@ cd opencode-setup
 
 - **Bun 运行时** — 无需预装 Node.js，自动安装 Bun，避免跨平台 PATH 问题
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
-- **GSD 工作流** — 项目全生命周期管理
+- **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
 - **零假设** — 不依赖任何预装工具（除 curl 和 git）
 
 ## 安装效果
@@ -28,7 +28,8 @@ cd opencode-setup
 ├── opencode.json           ←  Provider + 插件配置（oh-my-openagent + superpowers）
 ├── oh-my-openagent.json    ←  Agent 模型路由
 ├── node_modules/           ←  oh-my-openagent + superpowers 插件
-├── get-shit-done/          ←  GSD 工作流（自动克隆）
+├── command/                ←  GSD Core 命令（/gsd-* 斜杠命令）
+├── agents/                 ←  GSD Core 子 Agent
 └── skills/                 ←  技能链接库
 
 ~/.claude/
@@ -49,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup
 3. 安装 Bun 运行时（如未安装）
 4. 通过 Bun 安装 OpenCode
 5. 安装 oh-my-openagent 插件
-6. 安装 GSD 工作流
+6. 安装 GSD Core 工作流（npx 官方安装器）
 
 ### 自定义路径
 
@@ -150,9 +151,9 @@ agent model > category model > 用户 fallback_models > 源码内置回退链 > 
 | unspecified-high | 高难度杂项 |
 | writing | 文档、写作 |
 
-## GSD 工作流
+## GSD Core 工作流
 
-GSD (Get Shit Done) 提供完整的项目生命周期管理：
+GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD 的官方继任项目，原生支持 OpenCode。安装后无需额外配置即可使用 `/gsd-*` 命令：
 
 | 命令 | 功能 |
 |------|------|
@@ -181,10 +182,12 @@ bun install -g opencode-ai
 
 重启 OpenCode 会话后生效。
 
-### GSD 克隆失败
+### GSD Core 安装失败
+
+确保 Node.js 已安装，然后手动运行：
 
 ```bash
-git clone https://github.com/OpenAgentsInc/gsd.git ~/.config/opencode/get-shit-done
+npx --yes @opengsd/gsd-core@latest --opencode --global
 ```
 
 ### "未检测到 OpenCode 环境"
@@ -194,7 +197,6 @@ git clone https://github.com/OpenAgentsInc/gsd.git ~/.config/opencode/get-shit-d
 ## 环境要求
 
 - curl（安装 Bun 用）
-- git（安装 GSD 用）
 - 网络连接
 
 Bun 和 OpenCode 由脚本自动安装。
