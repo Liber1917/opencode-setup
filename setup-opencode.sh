@@ -642,9 +642,9 @@ echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
 CG_BIN="$(command -v codegraph 2>/dev/null)"
 if [ -z "$CG_BIN" ]; then
   if command -v npm &> /dev/null; then
-    echo -e "${YELLOW}正在安装 codegraph...${NC}"
+    echo -e "${YELLOW}正在安装 codegraph（npmmirror 源，约 30-60s，超时 120s）...${NC}"
     CG_INSTALL_LOG="$(mktemp)"
-    if npm i -g @colbymchenry/codegraph > "$CG_INSTALL_LOG" 2>&1; then
+    if timeout 120 npm i -g --registry="$NPM_REGISTRY" @colbymchenry/codegraph > "$CG_INSTALL_LOG" 2>&1; then
       NPM_PREFIX="$(npm config get prefix)"
       CG_BIN="$NPM_PREFIX/bin/codegraph"
       if [ -x "$CG_BIN" ]; then
@@ -659,15 +659,15 @@ if [ -z "$CG_BIN" ]; then
           fi
         fi
       else
-        echo -e "${YELLOW}⚠ codegraph 安装失败，跳过 MCP 注册${NC}"
+        echo -e "${YELLOW}⚠ codegraph 安装失败（已装但未找到二进制），跳过 MCP 注册${NC}"
         tail -5 "$CG_INSTALL_LOG"
         echo "  装好后重新运行脚本即可注册 MCP"
         CG_BIN=""
       fi
     else
-      echo -e "${YELLOW}⚠ codegraph 安装失败，跳过 MCP 注册${NC}"
+      echo -e "${YELLOW}⚠ codegraph 安装失败（超时或网络错误），跳过 MCP 注册${NC}"
       tail -5 "$CG_INSTALL_LOG"
-      echo "  手动安装: npm i -g @colbymchenry/codegraph"
+      echo "  可手动重试: npm i -g --registry=$NPM_REGISTRY @colbymchenry/codegraph"
       CG_BIN=""
     fi
     rm -f "$CG_INSTALL_LOG"
