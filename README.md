@@ -3,7 +3,8 @@
 一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、GSD 工作流、CodeGraph MCP 和完整的 Agent 生态。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash
+# 国内网络优先走镜像（gh-proxy.com → ghfast.top → 官方直连 自动回退）
+curl -fsSL "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" | bash
 ```
 
 或克隆后运行：
