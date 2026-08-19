@@ -23,6 +23,7 @@ cd opencode-setup
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
 - **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
 - **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
+- **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
 - **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
@@ -48,18 +49,19 @@ cd opencode-setup
 
 ## 使用方式
 
-安装脚本按 10 步执行：
+安装脚本按 11 步执行：
 
 1. 检测非 bash 环境并自动切换
 2. 检测已有配置并备份
 3. 生成 opencode.json（含 codegraph MCP）/ oh-my-openagent.json / Claude settings
-4. 检查前置依赖：unzip、node（缺失自动安装）+ 配置 npm 镜像源
-5. 安装 Bun 运行时（npm 镜像优先，失败回退官方脚本）+ Bun registry 配置
-6. 通过 Bun 安装 OpenCode
-7. 安装 oh-my-openagent 插件
-8. 安装 GSD Core 工作流（npx 官方安装器）
-9. 安装 CodeGraph CLI
-10. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
+4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
+5. 检查前置依赖：unzip、node（缺失自动安装）+ 配置 npm 镜像源
+6. 安装 Bun 运行时（npm 镜像优先，失败回退官方脚本）+ Bun registry 配置
+7. 通过 Bun 安装 OpenCode
+8. 安装 oh-my-openagent 插件
+9. 安装 GSD Core 工作流（npx 官方安装器）
+10. 安装 CodeGraph CLI
+11. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
 
 ### 自定义路径
 
@@ -79,6 +81,18 @@ export NPM_REGISTRY=https://registry.npmjs.org
 ```
 
 脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。
+
+### apt 源优化控制
+
+apt 源测速默认执行：官方源最快则保持不动；若源文件已自定义（非官方域名）则跳过，避免覆盖手动配置。可用环境变量控制：
+
+```bash
+export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
+export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）
+./setup-opencode.sh
+```
+
+切换前自动备份原文件为 `sources.list.bak`；`apt-get update` 失败时提示还原命令。
 
 ### 备份
 
@@ -210,7 +224,7 @@ RTK 安装走镜像链（gh-proxy.com → ghfast.top → 官方直连），无�
 
 ### 国内网络安装慢
 
-脚本已默认使用 npmmirror 镜像（npm/npx/bun 全部走镜像）。Bun 安装优先走 npm 镜像，不再依赖 GitHub。node 安装仍走 nodesource，若也慢请手动安装 node 后重跑脚本。RTK 下载走 GitHub 代理镜像链（gh-proxy.com → ghfast.top → 官方直连），任一源可用即成功。
+脚本已默认使用 npmmirror 镜像（npm/npx/bun 全部走镜像），apt 源自动测速切换最快国内镜像。Bun 安装优先走 npm 镜像，不再依赖 GitHub。node 安装仍走 nodesource，若也慢请手动安装 node 后重跑脚本。RTK 下载走 GitHub 代理镜像链（gh-proxy.com → ghfast.top → 官方直连），任一源可用即成功。
 
 ### RTK 未生效
 

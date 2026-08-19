@@ -164,9 +164,77 @@ EOF
 fi
 
 # ------------------------------------------------------------------
-# 步骤 4: 检查前置依赖
+# 步骤 4: apt 源测速优化（仅 apt 系系统；官方最快则不动，已自定义则跳过）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[4/10] 检查前置依赖...${NC}"
+echo -e "${YELLOW}[4/11] apt 源测速优化...${NC}"
+
+if ! command -v apt-get &> /dev/null || [ "$SKIP_APT_MIRROR" = "1" ]; then
+  echo -e "${BLUE}  - 非 apt 系统或已跳过（SKIP_APT_MIRROR=1），跳过源优化${NC}"
+else
+  # 支持两种源文件格式：传统 sources.list / 24.04+ deb822 ubuntu.sources
+  APT_SOURCES=""
+  for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+    [ -f "$f" ] && APT_SOURCES="$f" && break
+  done
+
+  if [ -z "$APT_SOURCES" ]; then
+    echo -e "${YELLOW}⚠ 未找到 apt 源文件，跳过源优化${NC}"
+  else
+    # 官方域名未被替换过才执行；FORCE_APT_MIRROR=1 强制重测
+    if [ "$FORCE_APT_MIRROR" = "1" ] || grep -Eq 'archive\.ubuntu\.com|security\.ubuntu\.com' "$APT_SOURCES"; then
+      APT_CODENAME="$(grep -E '^VERSION_CODENAME=' /etc/os-release | cut -d= -f2)"
+      [ -z "$APT_CODENAME" ] && APT_CODENAME="jammy"
+
+      echo -e "${BLUE}  测速中 (发行版 $APT_CODENAME)...${NC}"
+      BEST_MIRROR=""
+      BEST_SPEED=0
+      for M in mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn mirrors.huaweicloud.com mirrors.cloud.tencent.com mirrors.163.com archive.ubuntu.com; do
+        # 单次下载测速（速度取两次采样最大值，避免抖动）
+        SPEED=0
+        for _ in 1 2; do
+          S="$(curl -fsSL --connect-timeout 5 --max-time 10 -o /dev/null -w '%{speed_download}' "http://$M/ubuntu/dists/$APT_CODENAME/Release" 2>/dev/null)"
+          S="${S%.*}"
+          [ "${S:-0}" -gt "$SPEED" ] 2>/dev/null && SPEED="$S"
+        done
+        if [ "${SPEED:-0}" -gt 0 ] 2>/dev/null; then
+          echo -e "  ${M}: $((SPEED / 1024)) KB/s"
+          if [ "$SPEED" -gt "$BEST_SPEED" ] 2>/dev/null; then
+            BEST_SPEED="$SPEED"
+            BEST_MIRROR="$M"
+          fi
+        else
+          echo -e "  ${M}: 不可达"
+        fi
+      done
+
+      if [ -n "$BEST_MIRROR" ]; then
+        if [ "$BEST_MIRROR" = "archive.ubuntu.com" ]; then
+          echo -e "${GREEN}✓ 官方源最快 ($((BEST_SPEED / 1024)) KB/s)，保持不动${NC}"
+        else
+          cp "$APT_SOURCES" "${APT_SOURCES}.bak"
+          # 仅替换主机名，保留协议与路径（同时覆盖传统与 deb822 格式）
+          sudo sed -i "s|//archive\.ubuntu\.com|//$BEST_MIRROR|g; s|//security\.ubuntu\.com|//$BEST_MIRROR|g" "$APT_SOURCES"
+          echo -e "${GREEN}✓ 已切换至 $BEST_MIRROR ($((BEST_SPEED / 1024)) KB/s)${NC}"
+          echo -e "${BLUE}  原文件已备份: ${APT_SOURCES}.bak${NC}"
+          if sudo apt-get update >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ apt update 验证通过${NC}"
+          else
+            echo -e "${YELLOW}⚠ apt update 失败，还原原源: sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
+          fi
+        fi
+      else
+        echo -e "${YELLOW}⚠ 所有源均不可达（网络受限？），保持原配置${NC}"
+      fi
+    else
+      echo -e "${BLUE}  - apt 源已自定义，跳过（FORCE_APT_MIRROR=1 可强制重测）${NC}"
+    fi
+  fi
+fi
+
+# ------------------------------------------------------------------
+# 步骤 5: 检查前置依赖
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[5/11] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
@@ -225,9 +293,9 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 步骤 5: 安装 Bun 运行时
+# 步骤 6: 安装 Bun 运行时
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[5/10] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[6/11] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   local bun_cmd=""
@@ -293,9 +361,9 @@ fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 # ------------------------------------------------------------------
-# 步骤 6: 安装 OpenCode
+# 步骤 7: 安装 OpenCode
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[6/10] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[7/11] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
 export PATH="$HOME/.bun/bin:$PATH"
@@ -324,9 +392,9 @@ if [ -n "$WINDOWS_OPENCODE" ] && echo "$WINDOWS_OPENCODE" | grep -q "/mnt/"; the
 fi
 
 # ------------------------------------------------------------------
-# 步骤 7: 安装 oh-my-openagent 插件
+# 步骤 8: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[7/10] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[8/11] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -419,9 +487,9 @@ fi
 rm -f "$OMO_PATCH_FILE"
 
 # ------------------------------------------------------------------
-# 步骤 8: 安装 GSD Core 工作流
+# 步骤 9: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[8/10] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[9/11] 安装 GSD Core 工作流...${NC}"
 
 # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
 if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
@@ -446,9 +514,9 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 步骤 9: 安装 CodeGraph MCP（代码图索引）
+# 步骤 10: 安装 CodeGraph MCP（代码图索引）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[9/10] 安装 CodeGraph MCP...${NC}"
+echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
 
 if command -v codegraph &> /dev/null; then
   echo -e "${GREEN}✓ codegraph 已存在${NC}"
@@ -466,10 +534,10 @@ echo -e "${BLUE}  在项目目录运行 'codegraph init' 生成索引${NC}"
 echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
 
 # ------------------------------------------------------------------
-# 步骤 10: 安装 RTK（Rust Token Killer，压缩命令输出节省 Token）
+# 步骤 11: 安装 RTK（Rust Token Killer，压缩命令输出节省 Token）
 # 零认证：版本号走 api.github.com，下载走镜像链（gh-proxy → ghfast → 官方直连）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[10/10] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
+echo -e "${YELLOW}[11/11] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
 
 if command -v rtk &> /dev/null; then
   echo -e "${GREEN}✓ rtk 已安装 ($(rtk --version))${NC}"
