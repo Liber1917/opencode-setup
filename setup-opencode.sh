@@ -336,6 +336,88 @@ else
   echo -e "${GREEN}✓ oh-my-openagent 插件已存在${NC}"
 fi
 
+echo -e "${YELLOW}应用 omo 模型跟随补丁...${NC}"
+OMO_PATCH_FILE="$(mktemp)"
+cat > "$OMO_PATCH_FILE" << 'OMO_PATCH_EOF'
+import { readFileSync, writeFileSync } from "node:fs";
+
+const file = process.argv[2];
+if (!file) {
+  console.error("usage: node omo-follow-system-default.mjs <dist/index.js>");
+  process.exit(1);
+}
+let src = readFileSync(file, "utf8");
+let changed = 0;
+
+const p1Marker = "Model resolved via system default (before hardcoded fallback chain)";
+if (!src.includes(p1Marker)) {
+  const anchor =
+    '      log3("No available model found in user fallback_models, falling through to hardcoded chain");\n' +
+    "    }\n" +
+    "  }\n" +
+    "  if (fallbackChain && fallbackChain.length > 0) {";
+  const replacement =
+    '      log3("No available model found in user fallback_models, falling through to hardcoded chain");\n' +
+    "    }\n" +
+    "  }\n" +
+    "  if (systemDefaultModel !== undefined) {\n" +
+    '    log3("Model resolved via system default (before hardcoded fallback chain)", { model: systemDefaultModel });\n' +
+    '    return { model: systemDefaultModel, provenance: "system-default", attempted };\n' +
+    "  }\n" +
+    "  if (fallbackChain && fallbackChain.length > 0) {";
+  if (!src.includes(anchor)) throw new Error("patch1 anchor not found (omo dist changed)");
+  src = src.replace(anchor, replacement);
+  const tail =
+    "  if (systemDefaultModel === undefined) {\n" +
+    '    log3("No model resolved - systemDefaultModel not configured");\n' +
+    "    return;\n" +
+    "  }\n" +
+    '  log3("Model resolved via system default", { model: systemDefaultModel });\n' +
+    '  return { model: systemDefaultModel, provenance: "system-default", attempted };\n';
+  if (!src.includes(tail)) throw new Error("patch1 tail not found");
+  src = src.replace(tail, "");
+  changed++;
+}
+
+const p2Marker = "[resolveModelForDelegateTask] system default before hardcoded chain";
+if (!src.includes(p2Marker)) {
+  const anchor = "  const fallbackChain = input.fallbackChain;\n" + "  if (fallbackChain && fallbackChain.length > 0) {";
+  const replacement =
+    "  const systemDefaultModel = normalizeModel(input.systemDefaultModel);\n" +
+    "  if (systemDefaultModel) {\n" +
+    '    deps.log?.("[resolveModelForDelegateTask] system default before hardcoded chain", { model: systemDefaultModel });\n' +
+    "    return { model: systemDefaultModel };\n" +
+    "  }\n" +
+    "  const fallbackChain = input.fallbackChain;\n" +
+    "  if (fallbackChain && fallbackChain.length > 0) {";
+  if (!src.includes(anchor)) throw new Error("patch2 anchor not found");
+  src = src.replace(anchor, replacement);
+  const tail =
+    "  const systemDefaultModel = normalizeModel(input.systemDefaultModel);\n" +
+    "  if (systemDefaultModel) {\n" +
+    "    return { model: systemDefaultModel };\n" +
+    "  }\n" +
+    "  return;\n";
+  if (!src.includes(tail)) throw new Error("patch2 tail not found");
+  src = src.replace(tail, "  return;\n");
+  changed++;
+}
+
+if (changed > 0) {
+  writeFileSync(file, src);
+  console.log("omo patch applied");
+} else {
+  console.log("omo patch already applied");
+}
+OMO_PATCH_EOF
+
+if [ -f "$CONFIG_DIR/node_modules/oh-my-openagent/dist/index.js" ] && node "$OMO_PATCH_FILE" "$CONFIG_DIR/node_modules/oh-my-openagent/dist/index.js"; then
+  echo -e "${GREEN}✓ omo 模型跟随补丁已应用（子代理跟随 opencode.json 的 model）${NC}"
+else
+  echo -e "${YELLOW}⚠ omo 补丁失败（omo 版本可能已变化，子代理将回退硬编码模型链）${NC}"
+fi
+rm -f "$OMO_PATCH_FILE"
+
 # ------------------------------------------------------------------
 # 步骤 8: 安装 GSD Core 工作流
 # ------------------------------------------------------------------

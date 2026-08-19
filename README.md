@@ -21,6 +21,7 @@ cd opencode-setup
 - **Bun 运行时** — 自动安装（npm 镜像优先，官方脚本回退），检测损坏自愈，避免跨平台 PATH 问题
 - **npm 镜像加速** — 默认 npmmirror，国内网络下安装飞快，可用环境变量覆盖
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
+- **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
 - **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
