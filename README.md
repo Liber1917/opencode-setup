@@ -1,6 +1,6 @@
 # opencode-setup
 
-一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、GSD 工作流和完整的 Agent 生态。
+一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、GSD 工作流、CodeGraph MCP 和完整的 Agent 生态。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash
@@ -14,18 +14,22 @@ cd opencode-setup
 ./setup-opencode.sh
 ```
 
+用 `sh` 运行也没问题——脚本检测到非 bash 环境会自动以 bash 重新执行。
+
 ## 特性
 
-- **Bun 运行时** — 无需预装 Node.js，自动安装 Bun，避免跨平台 PATH 问题
+- **Bun 运行时** — 自动安装（npm 镜像优先，官方脚本回退），检测损坏自愈，避免跨平台 PATH 问题
+- **npm 镜像加速** — 默认 npmmirror，国内网络下安装飞快，可用环境变量覆盖
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
 - **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
-- **零假设** — 不依赖任何预装工具（除 curl 和 git）
+- **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
+- **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
 
 ## 安装效果
 
 ```
 ~/.config/opencode/
-├── opencode.json           ←  Provider + 插件配置（oh-my-openagent + superpowers）
+├── opencode.json           ←  Provider + MCP（gsd/codegraph）+ 插件配置（oh-my-openagent + superpowers）
 ├── oh-my-openagent.json    ←  Agent 模型路由
 ├── node_modules/           ←  oh-my-openagent + superpowers 插件
 ├── command/                ←  GSD Core 命令（/gsd-* 斜杠命令）
@@ -34,23 +38,24 @@ cd opencode-setup
 
 ~/.claude/
 └── settings.json           ←  Hooks 配置
+
+~/.npmrc                    ←  npm 镜像源（npmmirror）
+~/.bunfig.toml              ←  Bun registry 镜像
 ```
 
 ## 使用方式
 
-### 标准安装
+安装脚本按 9 步执行：
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash
-```
-
-安装脚本会自动：
-1. 检测已有配置并备份
-2. 生成 opencode.json / oh-my-openagent.json / Claude settings
-3. 安装 Bun 运行时（如未安装）
-4. 通过 Bun 安装 OpenCode
-5. 安装 oh-my-openagent 插件
-6. 安装 GSD Core 工作流（npx 官方安装器）
+1. 检测非 bash 环境并自动切换
+2. 检测已有配置并备份
+3. 生成 opencode.json（含 codegraph MCP）/ oh-my-openagent.json / Claude settings
+4. 检查前置依赖：unzip、node（缺失自动安装）+ 配置 npm 镜像源
+5. 安装 Bun 运行时（npm 镜像优先，失败回退官方脚本）+ Bun registry 配置
+6. 通过 Bun 安装 OpenCode
+7. 安装 oh-my-openagent 插件
+8. 安装 GSD Core 工作流（npx 官方安装器）
+9. 安装 CodeGraph CLI
 
 ### 自定义路径
 
@@ -59,6 +64,17 @@ export OPENCODE_CONFIG_DIR=/custom/path/opencode
 export CLAUDE_CONFIG_DIR=/custom/path/claude
 ./setup-opencode.sh
 ```
+
+### 自定义 npm 镜像源
+
+默认 `https://registry.npmmirror.com`。如需其他镜像或恢复官方源：
+
+```bash
+export NPM_REGISTRY=https://registry.npmjs.org
+./setup-opencode.sh
+```
+
+脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。
 
 ### 备份
 
@@ -163,7 +179,22 @@ GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD �
 | `/gsd-progress` | 进度跟踪 |
 | `/gsd-help` | 全部命令列表 |
 
+## CodeGraph
+
+脚本会在 opencode.json 中注册 codegraph MCP 并安装 CLI。索引按项目启用：
+
+```bash
+cd your-project
+codegraph init        # 生成 .codegraph/ 索引（之后自动增量同步）
+```
+
+重启 OpenCode 后 `codegraph_explore` 等工具生效。无索引的目录中 MCP 自动休眠，不影响其他工具。
+
 ## 常见问题
+
+### 国内网络安装慢
+
+脚本已默认使用 npmmirror 镜像（npm/npx/bun 全部走镜像）。Bun 安装优先走 npm 镜像，不再依赖 GitHub。node 安装仍走 nodesource，若也慢请手动安装 node 后重跑脚本。
 
 ### `node: not found`
 
@@ -196,17 +227,17 @@ npx --yes @opengsd/gsd-core@latest --opencode --global
 
 ## 环境要求
 
-- curl（安装 Bun 用）
-- 网络连接
+- bash（用 `sh` 运行会自动切换）
+- curl / git / 网络连接
 
-Bun 和 OpenCode 由脚本自动安装。
+node、Bun、OpenCode 由脚本自动安装。
 
 ## 文件清单
 
 | 文件 | 说明 |
 |------|------|
-| `setup-opencode.sh` | **统一安装脚本（推荐）** |
-| `backup-opencode-config.sh` | 配置文件备份 |
+| `setup-opencode.sh` | 统一安装脚本（唯一入口） |
+| `backup-opencode-config.sh` | 配置文件手动备份工具 |
 
 ## License
 
