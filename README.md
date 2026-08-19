@@ -18,7 +18,7 @@ cd opencode-setup
 
 ## 特性
 
-- **Bun 运行时** — 自动安装（npm 镜像优先，官方脚本回退），检测损坏自愈，避免跨平台 PATH 问题
+- **Bun 运行时** — 自动安装（npm 镜像优先 → npmmirror 二进制 → 官方脚本三级回退），检测损坏自愈，避免跨平台 PATH 问题
 - **npm 镜像加速** — 默认 npmmirror，国内网络下安装飞快，可用环境变量覆盖
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
 - **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
@@ -57,7 +57,7 @@ cd opencode-setup
 3. 生成 opencode.json（含 codegraph MCP）/ oh-my-openagent.json / Claude settings
 4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
 5. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
-6. 安装 Bun 运行时（npm 镜像优先，失败回退官方脚本）+ Bun registry 配置
+6. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
 7. 通过 Bun 安装 OpenCode
 8. 安装 oh-my-openagent 插件
 9. 安装 GSD Core 工作流（npx 官方安装器）

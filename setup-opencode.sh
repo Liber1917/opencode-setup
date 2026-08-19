@@ -390,13 +390,37 @@ ensure_bun() {
     rm -f "$HOME/.bun/bin/bun" "$HOME/.bun/bin/bunx"
   fi
 
-  echo "正在安装 Bun（优先 npm 镜像，失败回退官方脚本）..."
+  echo "正在安装 Bun（优先 npm 镜像，失败回退 npmmirror 二进制，再回退官方脚本）..."
   if npm i -g bun >/dev/null 2>&1 && command -v bun >/dev/null 2>&1 && bun --version >/dev/null 2>&1; then
     echo -e "${GREEN}✓ Bun 安装成功 ($(bun --version))${NC}"
     return 0
   fi
 
-  echo -e "${YELLOW}⚠ npm 安装失败，回退官方安装脚本...${NC}"
+  echo -e "${YELLOW}⚠ npm 安装失败，尝试 npmmirror 二进制...${NC}"
+  if command -v unzip >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
+    BUN_ARCH="x64"
+    case "$(uname -m)" in
+      x86_64) BUN_ARCH="x64" ;;
+      aarch64) BUN_ARCH="aarch64" ;;
+      *) BUN_ARCH="" ;;
+    esac
+    if [ -n "$BUN_ARCH" ]; then
+      BUN_VERSION="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/bun/" 2>/dev/null | grep -o '"name":"bun-v[0-9.]*/"' | sed 's/"name":"//; s/\/"//' | sort -V | tail -1)"
+      BUN_TMP="$(mktemp -d)"
+      if [ -n "$BUN_VERSION" ] && curl -fsSL --connect-timeout 8 --max-time 180 -o "$BUN_TMP/bun.zip" "https://registry.npmmirror.com/-/binary/bun/$BUN_VERSION/bun-linux-$BUN_ARCH.zip" 2>/dev/null && unzip -qo "$BUN_TMP/bun.zip" -d "$BUN_TMP" && [ -f "$BUN_TMP/bun-linux-$BUN_ARCH/bun" ]; then
+        mkdir -p "$HOME/.bun/bin"
+        install -m 0755 "$BUN_TMP/bun-linux-$BUN_ARCH/bun" "$HOME/.bun/bin/bun"
+        ln -sf "$HOME/.bun/bin/bun" "$HOME/.bun/bin/bunx"
+        export PATH="$HOME/.bun/bin:$PATH"
+        rm -rf "$BUN_TMP"
+        echo -e "${GREEN}✓ Bun 安装成功 (npmmirror 二进制, $(bun --version))${NC}"
+        return 0
+      fi
+      rm -rf "$BUN_TMP"
+    fi
+  fi
+
+  echo -e "${YELLOW}⚠ npmmirror 下载失败，回退官方安装脚本...${NC}"
   curl -fsSL https://bun.sh/install | bash
   if [ -f "$HOME/.bun/bin/bun" ]; then
     export PATH="$HOME/.bun/bin:$PATH"
