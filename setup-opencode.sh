@@ -55,10 +55,26 @@ CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
+# root 环境无需 sudo；非 root 且有 sudo 时自动补前缀
+SUDO=""
+if [ "$(id -u)" != "0" ] && command -v sudo &> /dev/null; then
+  SUDO="sudo"
+fi
+
 echo -e "${BLUE}目标目录:${NC}"
 echo "  OpenCode: $CONFIG_DIR"
 echo "  Claude:   $CLAUDE_DIR"
 echo ""
+
+# 确保 curl（下载依赖）；缺失时尝试 apt 安装，失败仅提示
+if ! command -v curl &> /dev/null; then
+  echo -e "${YELLOW}⚠ curl 未安装，尝试安装...${NC}"
+  if command -v apt-get &> /dev/null && apt-get update >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ curl 已安装${NC}"
+  else
+    echo -e "${YELLOW}⚠ curl 安装失败，后续下载步骤可能不可用${NC}"
+  fi
+fi
 
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
@@ -183,6 +199,8 @@ echo -e "${YELLOW}[4/11] apt 源测速优化...${NC}"
 
 if ! command -v apt-get &> /dev/null || [ "$SKIP_APT_MIRROR" = "1" ]; then
   echo -e "${BLUE}  - 非 apt 系统或已跳过（SKIP_APT_MIRROR=1），跳过源优化${NC}"
+elif ! command -v curl &> /dev/null; then
+  echo -e "${YELLOW}⚠ curl 未安装，跳过 apt 源测速（不影响其他步骤）${NC}"
 else
   # 支持两种源文件格式：传统 sources.list / 24.04+ deb822 ubuntu.sources
   APT_SOURCES=""
@@ -205,7 +223,7 @@ else
         # 单次下载测速（速度取两次采样最大值，避免抖动）
         SPEED=0
         for _ in 1 2; do
-          S="$(curl -fsSL --connect-timeout 5 --max-time 10 -o /dev/null -w '%{speed_download}' "http://$M/ubuntu/dists/$APT_CODENAME/Release" 2>/dev/null)"
+          S="$(curl -fsSL --connect-timeout 5 --max-time 10 -o /dev/null -w '%{speed_download}' "http://$M/ubuntu/dists/$APT_CODENAME/Release" 2>/dev/null || true)"
           S="${S%.*}"
           [ "${S:-0}" -gt "$SPEED" ] 2>/dev/null && SPEED="$S"
         done
@@ -226,10 +244,10 @@ else
         else
           cp "$APT_SOURCES" "${APT_SOURCES}.bak"
           # 仅替换主机名，保留协议与路径（同时覆盖传统与 deb822 格式）
-          sudo sed -i "s|//archive\.ubuntu\.com|//$BEST_MIRROR|g; s|//security\.ubuntu\.com|//$BEST_MIRROR|g" "$APT_SOURCES"
+          $SUDO sed -i "s|//archive\.ubuntu\.com|//$BEST_MIRROR|g; s|//security\.ubuntu\.com|//$BEST_MIRROR|g" "$APT_SOURCES"
           echo -e "${GREEN}✓ 已切换至 $BEST_MIRROR ($((BEST_SPEED / 1024)) KB/s)${NC}"
           echo -e "${BLUE}  原文件已备份: ${APT_SOURCES}.bak${NC}"
-          if sudo apt-get update >/dev/null 2>&1; then
+          if $SUDO apt-get update >/dev/null 2>&1; then
             echo -e "${GREEN}✓ apt update 验证通过${NC}"
           else
             echo -e "${YELLOW}⚠ apt update 失败，还原原源: sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
@@ -255,9 +273,9 @@ echo -e "${YELLOW}[5/11] 检查前置依赖...${NC}"
 if ! command -v unzip &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
   if command -v apt-get &> /dev/null; then
-    sudo apt-get install -y unzip
+    $SUDO apt-get install -y unzip
   elif command -v yum &> /dev/null; then
-    sudo yum install -y unzip
+    $SUDO yum install -y unzip
   elif command -v brew &> /dev/null; then
     brew install unzip
   elif command -v apk &> /dev/null; then
@@ -291,7 +309,7 @@ if ! command -v node &> /dev/null; then
       NODE_V=""
       # 优先 LTS 系列（v24 → v22），取目录 JSON 中最新 linux 包名
       for V in latest-v24.x latest-v22.x; do
-        NODE_FILE="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/node/$V/" 2>/dev/null | grep -o "\"name\":\"node-v[0-9.]*-linux-$NODE_ARCH.tar.xz\"" | head -1 | cut -d'"' -f4)"
+        NODE_FILE="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/node/$V/" 2>/dev/null | grep -o "\"name\":\"node-v[0-9.]*-linux-$NODE_ARCH.tar.xz\"" | head -1 | cut -d'"' -f4 || true)"
         if [ -n "$NODE_FILE" ]; then
           NODE_V="$V"
           break
@@ -317,11 +335,11 @@ if ! command -v node &> /dev/null; then
   if [ "$NODE_INSTALLED" != "1" ]; then
     echo -e "${YELLOW}npmmirror 下载失败，回退系统包管理器...${NC}"
     if command -v apt-get &> /dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
-      sudo apt-get install -y nodejs
+      curl -fsSL https://deb.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
+      $SUDO apt-get install -y nodejs
     elif command -v yum &> /dev/null; then
-      curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
-      sudo yum install -y nodejs
+      curl -fsSL https://rpm.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
+      $SUDO yum install -y nodejs
     elif command -v brew &> /dev/null; then
       brew install node
     else
@@ -422,7 +440,7 @@ ensure_bun() {
       *) BUN_ARCH="" ;;
     esac
     if [ -n "$BUN_ARCH" ]; then
-      BUN_VERSION="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/bun/" 2>/dev/null | grep -o '"name":"bun-v[0-9.]*/"' | sed 's/"name":"//; s/\/"//' | sort -V | tail -1)"
+      BUN_VERSION="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/bun/" 2>/dev/null | grep -o '"name":"bun-v[0-9.]*/"' | sed 's/"name":"//; s/\/"//' | sort -V | tail -1 || true)"
       BUN_TMP="$(mktemp -d)"
       if [ -n "$BUN_VERSION" ] && curl -fsSL --connect-timeout 8 --max-time 180 -o "$BUN_TMP/bun.zip" "https://registry.npmmirror.com/-/binary/bun/$BUN_VERSION/bun-linux-$BUN_ARCH.zip" 2>/dev/null && unzip -qo "$BUN_TMP/bun.zip" -d "$BUN_TMP" && [ -f "$BUN_TMP/bun-linux-$BUN_ARCH/bun" ]; then
         mkdir -p "$HOME/.bun/bin"
@@ -639,7 +657,7 @@ step_end 9 "安装 GSD Core 工作流"
 step_begin
 echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
 
-CG_BIN="$(command -v codegraph 2>/dev/null)"
+CG_BIN="$(command -v codegraph 2>/dev/null || true)"
 if [ -z "$CG_BIN" ]; then
   if command -v npm &> /dev/null; then
     echo -e "${YELLOW}正在安装 codegraph（npmmirror 源，约 30-60s，超时 120s）...${NC}"
@@ -711,7 +729,7 @@ if command -v rtk &> /dev/null; then
   echo -e "${GREEN}✓ rtk 已安装 ($(rtk --version))${NC}"
 else
   # 动态获取最新版本号（无需认证），失败则回退已知版本
-  RTK_VERSION="$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/rtk-ai/rtk/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+  RTK_VERSION="$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/rtk-ai/rtk/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
   [ -z "$RTK_VERSION" ] && RTK_VERSION="v0.45.0"
 
   # 架构检测: x86_64 用 musl 静态二进制（零依赖），aarch64 用 gnu
