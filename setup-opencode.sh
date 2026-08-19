@@ -639,36 +639,58 @@ step_end 9 "安装 GSD Core 工作流"
 step_begin
 echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
 
-if command -v codegraph &> /dev/null; then
-  echo -e "${GREEN}✓ codegraph 已存在${NC}"
-else
+CG_BIN="$(command -v codegraph 2>/dev/null)"
+if [ -z "$CG_BIN" ]; then
   if command -v npm &> /dev/null; then
     echo -e "${YELLOW}正在安装 codegraph...${NC}"
-    if npm i -g @colbymchenry/codegraph >/dev/null 2>&1 && command -v codegraph &> /dev/null; then
-      echo -e "${GREEN}✓ codegraph 安装完成${NC}"
+    CG_INSTALL_LOG="$(mktemp)"
+    if npm i -g @colbymchenry/codegraph > "$CG_INSTALL_LOG" 2>&1; then
+      NPM_PREFIX="$(npm config get prefix)"
+      CG_BIN="$NPM_PREFIX/bin/codegraph"
+      if [ -x "$CG_BIN" ]; then
+        echo -e "${GREEN}✓ codegraph 安装完成 ($CG_BIN)${NC}"
+        # 脚本装的 node 为官方二进制布局，全局 bin 可能不在 PATH，补入
+        if ! command -v codegraph &> /dev/null; then
+          export PATH="$NPM_PREFIX/bin:$PATH"
+          if ! grep -q "NPM_PREFIX/bin" "$HOME/.bashrc" 2>/dev/null; then
+            echo "" >> "$HOME/.bashrc"
+            echo "# npm 全局 bin" >> "$HOME/.bashrc"
+            echo "export PATH=\"$NPM_PREFIX/bin:\$PATH\"" >> "$HOME/.bashrc"
+          fi
+        fi
+      else
+        echo -e "${YELLOW}⚠ codegraph 安装失败，跳过 MCP 注册${NC}"
+        tail -5 "$CG_INSTALL_LOG"
+        echo "  装好后重新运行脚本即可注册 MCP"
+        CG_BIN=""
+      fi
     else
       echo -e "${YELLOW}⚠ codegraph 安装失败，跳过 MCP 注册${NC}"
+      tail -5 "$CG_INSTALL_LOG"
       echo "  手动安装: npm i -g @colbymchenry/codegraph"
-      echo "  装好后重新运行脚本即可注册 MCP"
+      CG_BIN=""
     fi
+    rm -f "$CG_INSTALL_LOG"
   else
     echo -e "${YELLOW}⚠ npm 未安装，跳过 codegraph${NC}"
     echo "  手动安装: npm i -g @colbymchenry/codegraph"
   fi
+else
+  echo -e "${GREEN}✓ codegraph 已存在 ($CG_BIN)${NC}"
 fi
 
-# codegraph 可用时才注册 MCP（避免 opencode 启动报 Executable not found）
-if command -v codegraph &> /dev/null && [ -f "$CONFIG_DIR/opencode.json" ]; then
+# codegraph 可用时才注册 MCP；command 用绝对路径，避免 PATH 问题
+if [ -n "$CG_BIN" ] && [ -f "$CONFIG_DIR/opencode.json" ]; then
   if node -e '
     const fs = require("fs");
     const p = process.argv[1];
+    const bin = process.argv[2];
     const c = JSON.parse(fs.readFileSync(p, "utf8"));
-    if (c.mcp && c.mcp.codegraph) process.exit(0);
     c.mcp = c.mcp || {};
-    c.mcp.codegraph = { type: "local", command: ["codegraph", "serve", "--mcp"], enabled: true };
+    c.mcp.codegraph = { type: "local", command: [bin, "serve", "--mcp"], enabled: true };
     fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
-  ' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
-    echo -e "${GREEN}✓ codegraph MCP 已注册到 opencode.json${NC}"
+  ' "$CONFIG_DIR/opencode.json" "$CG_BIN" 2>/dev/null; then
+    echo -e "${GREEN}✓ codegraph MCP 已注册到 opencode.json (绝对路径)${NC}"
   else
     echo -e "${YELLOW}⚠ codegraph MCP 注册失败，可手动添加${NC}"
   fi

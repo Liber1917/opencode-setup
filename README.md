@@ -204,7 +204,7 @@ GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD �
 
 ## CodeGraph
 
-脚本会安装 codegraph CLI（`@colbymchenry/codegraph`），安装成功后才在 opencode.json 中注册 MCP（避免启动报 Executable not found）。安装失败不会注册，装好后重新运行脚本即可。索引按项目启用：
+脚本会安装 codegraph CLI（`@colbymchenry/codegraph`），安装成功后才在 opencode.json 中注册 MCP（避免启动报 Executable not found）。MCP command 使用**绝对路径**（兼容脚本安装的官方二进制 node 布局，其 npm 全局 bin 不在 PATH）；安装失败会显示真实错误日志，装好后重新运行脚本即可。索引按项目启用：
 
 ```bash
 cd your-project
