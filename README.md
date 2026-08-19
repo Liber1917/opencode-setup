@@ -24,6 +24,7 @@ cd opencode-setup
 - **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
 - **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
 - **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
+- **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 清华 PyPI 源
 - **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
@@ -55,7 +56,7 @@ cd opencode-setup
 2. 检测已有配置并备份
 3. 生成 opencode.json（含 codegraph MCP）/ oh-my-openagent.json / Claude settings
 4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
-5. 检查前置依赖：unzip、node（缺失自动安装）+ 配置 npm 镜像源
+5. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
 6. 安装 Bun 运行时（npm 镜像优先，失败回退官方脚本）+ Bun registry 配置
 7. 通过 Bun 安装 OpenCode
 8. 安装 oh-my-openagent 插件
@@ -80,7 +81,9 @@ export NPM_REGISTRY=https://registry.npmjs.org
 ./setup-opencode.sh
 ```
 
-脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。
+脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。pip 同样不覆盖已有 `index-url` 的配置。
+
+node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则预置 pip.conf 供后续安装生效），PyPI 源默认清华镜像，写入 `~/.config/pip/pip.conf`（兼容 `~/.pip/pip.conf`）。
 
 ### apt 源优化控制
 

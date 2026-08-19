@@ -260,18 +260,60 @@ fi
 # OpenCode 引导脚本需要 node（找到原生二进制后会切换到原生运行）
 if ! command -v node &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 node，正在安装...${NC}"
-  if command -v apt-get &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
-    sudo apt-get install -y nodejs
-  elif command -v yum &> /dev/null; then
-    curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
-    sudo yum install -y nodejs
-  elif command -v brew &> /dev/null; then
-    brew install node
-  else
-    echo -e "${RED}✗ 无法自动安装 node${NC}"
-    echo "  请手动安装后重新运行"
-    exit 1
+
+  # 优先 npmmirror node 二进制（国内快），失败回退发行版包管理器
+  NODE_INSTALLED=0
+  if command -v curl &> /dev/null && command -v tar &> /dev/null; then
+    NODE_ARCH="x64"
+    case "$(uname -m)" in
+      x86_64) NODE_ARCH="x64" ;;
+      aarch64) NODE_ARCH="arm64" ;;
+      *) NODE_ARCH="" ;;
+    esac
+    if [ -n "$NODE_ARCH" ]; then
+      NODE_TMP="$(mktemp -d)"
+      NODE_FILE=""
+      NODE_V=""
+      # 优先 LTS 系列（v24 → v22），取目录 JSON 中最新 linux 包名
+      for V in latest-v24.x latest-v22.x; do
+        NODE_FILE="$(curl -fsSL --connect-timeout 8 --max-time 20 "https://registry.npmmirror.com/-/binary/node/$V/" 2>/dev/null | grep -o "\"name\":\"node-v[0-9.]*-linux-$NODE_ARCH.tar.xz\"" | head -1 | cut -d'"' -f4)"
+        if [ -n "$NODE_FILE" ]; then
+          NODE_V="$V"
+          break
+        fi
+      done
+      if [ -n "$NODE_FILE" ] && curl -fsSL --connect-timeout 8 --max-time 180 -o "$NODE_TMP/node.tar.xz" "https://registry.npmmirror.com/-/binary/node/$NODE_V/$NODE_FILE" 2>/dev/null; then
+        :
+      fi
+      NODE_DIR="$(tar -tJf "$NODE_TMP/node.tar.xz" 2>/dev/null | head -1 | cut -d/ -f1)"
+      if [ -n "$NODE_DIR" ] && tar -xJf "$NODE_TMP/node.tar.xz" -C "$NODE_TMP" 2>/dev/null; then
+        mkdir -p /usr/local/lib/nodejs
+        cp -r "$NODE_TMP/$NODE_DIR" /usr/local/lib/nodejs/
+        ln -sf "/usr/local/lib/nodejs/$NODE_DIR/bin/node" /usr/local/bin/node
+        ln -sf "/usr/local/lib/nodejs/$NODE_DIR/bin/npm" /usr/local/bin/npm
+        ln -sf "/usr/local/lib/nodejs/$NODE_DIR/bin/npx" /usr/local/bin/npx
+        NODE_INSTALLED=1
+        echo -e "${GREEN}✓ node 安装成功（npmmirror 二进制，$(node --version)）${NC}"
+      fi
+      rm -rf "$NODE_TMP"
+    fi
+  fi
+
+  if [ "$NODE_INSTALLED" != "1" ]; then
+    echo -e "${YELLOW}npmmirror 下载失败，回退系统包管理器...${NC}"
+    if command -v apt-get &> /dev/null; then
+      curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
+      sudo apt-get install -y nodejs
+    elif command -v yum &> /dev/null; then
+      curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
+      sudo yum install -y nodejs
+    elif command -v brew &> /dev/null; then
+      brew install node
+    else
+      echo -e "${RED}✗ 无法自动安装 node${NC}"
+      echo "  请手动安装后重新运行"
+      exit 1
+    fi
   fi
 
   if command -v node &> /dev/null; then
@@ -290,6 +332,35 @@ if ! grep -q "^registry=" "$HOME/.npmrc" 2>/dev/null; then
   echo -e "${GREEN}✓ npm 镜像源已配置 (npm/npx/bun 共用)${NC}"
 else
   echo -e "${BLUE}  - ~/.npmrc 已有 registry 配置，跳过${NC}"
+fi
+
+# Python 生态: 无 pip 则用 ensurepip 引导, 再配置清华 PyPI 镜像
+if command -v python3 &> /dev/null; then
+  PIP_READY=0
+  if python3 -m pip --version &> /dev/null; then
+    PIP_READY=1
+  else
+    echo -e "${YELLOW}⚠ 缺少 pip，正在引导安装...${NC}"
+    if python3 -m ensurepip --upgrade >/dev/null 2>&1 && python3 -m pip --version &> /dev/null; then
+      PIP_READY=1
+      echo -e "${GREEN}✓ pip 引导完成 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
+    else
+      echo -e "${YELLOW}⚠ ensurepip 失败（可用 sudo apt install python3-pip 手动安装，pip.conf 已预置）${NC}"
+    fi
+  fi
+
+  PIP_CONF="$HOME/.config/pip/pip.conf"
+  if [ -f "$HOME/.pip/pip.conf" ]; then
+    PIP_CONF="$HOME/.pip/pip.conf"
+  fi
+  if ! grep -q "index-url" "$PIP_CONF" 2>/dev/null; then
+    mkdir -p "$(dirname "$PIP_CONF")"
+    printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > "$PIP_CONF"
+    echo -e "${GREEN}✓ PyPI 镜像源已配置 (清华, $PIP_CONF)${NC}"
+  else
+    echo -e "${BLUE}  - pip 已有 index-url 配置，跳过${NC}"
+  fi
+  [ "$PIP_READY" = "1" ] && echo -e "${GREEN}✓ pip 可用 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
 fi
 
 # ------------------------------------------------------------------
