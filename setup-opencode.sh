@@ -28,6 +28,7 @@ echo ""
 # ------------------------------------------------------------------
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 echo -e "${BLUE}目标目录:${NC}"
 echo "  OpenCode: $CONFIG_DIR"
@@ -204,6 +205,14 @@ else
   echo -e "${GREEN}✓ node 已就绪 ($(node --version))${NC}"
 fi
 
+echo -e "${YELLOW}配置 npm 镜像源 ($NPM_REGISTRY)...${NC}"
+if ! grep -q "^registry=" "$HOME/.npmrc" 2>/dev/null; then
+  echo "registry=$NPM_REGISTRY" >> "$HOME/.npmrc"
+  echo -e "${GREEN}✓ npm 镜像源已配置 (npm/npx/bun 共用)${NC}"
+else
+  echo -e "${BLUE}  - ~/.npmrc 已有 registry 配置，跳过${NC}"
+fi
+
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
 # ------------------------------------------------------------------
@@ -248,6 +257,13 @@ ensure_bun() {
 }
 
 ensure_bun
+
+if [ ! -f "$HOME/.bunfig.toml" ]; then
+  printf '[install]\nregistry = "%s"\n' "$NPM_REGISTRY" > "$HOME/.bunfig.toml"
+  echo -e "${GREEN}✓ Bun registry 已配置 ($NPM_REGISTRY)${NC}"
+else
+  echo -e "${BLUE}  - ~/.bunfig.toml 已存在，跳过${NC}"
+fi
 
 # 确保 bun 在 PATH 中
 if ! command -v bun &> /dev/null; then
