@@ -18,6 +18,31 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# 计时: step_begin 记起点, step_end 输出耗时, EXIT 时打印汇总表便于排查瓶颈
+_step_t0=0
+STEP_TIMES=()
+STEP_NAMES=()
+step_begin() { _step_t0=$(date +%s); }
+step_end() {
+  local n="$1" name="$2" d
+  d=$(( $(date +%s) - _step_t0 ))
+  STEP_TIMES[$n]="$d"
+  STEP_NAMES[$n]="$name"
+  echo -e "${BLUE}  - 步骤${n} 耗时 ${d}s${NC}"
+}
+step_summary() {
+  local i total=0
+  echo ""
+  echo -e "${YELLOW}=== 各环节耗时 ===${NC}"
+  for i in $(seq 1 11); do
+    [ -z "${STEP_TIMES[$i]:-}" ] && continue
+    printf "  [%s/11] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
+    total=$(( total + STEP_TIMES[$i] ))
+  done
+  echo -e "${YELLOW}总耗时: ${total}s${NC}"
+}
+trap step_summary EXIT
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  OpenCode 一键配置脚本 (Bun 版)${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -39,6 +64,7 @@ echo ""
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
 echo -e "${YELLOW}[1/11] 检测已有配置...${NC}"
+step_begin
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
@@ -61,6 +87,8 @@ fi
 # ------------------------------------------------------------------
 # 步骤 2: 创建目录结构
 # ------------------------------------------------------------------
+step_end 1 "检测已有配置"
+step_begin
 echo -e "${YELLOW}[2/11] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
@@ -70,7 +98,9 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 # ------------------------------------------------------------------
 # 步骤 3: 生成配置文件
 # ------------------------------------------------------------------
+step_end 2 "创建配置目录"
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
+  step_begin
   echo -e "${YELLOW}[3/11] 生成配置文件...${NC}"
 
   # opencode.json
@@ -142,11 +172,13 @@ EOF
   else
     echo -e "${BLUE}  - settings.json 已存在，跳过${NC}"
   fi
+  step_end 3 "生成配置文件"
 fi
 
 # ------------------------------------------------------------------
 # 步骤 4: apt 源测速优化（仅 apt 系系统；官方最快则不动，已自定义则跳过）
 # ------------------------------------------------------------------
+step_begin
 echo -e "${YELLOW}[4/11] apt 源测速优化...${NC}"
 
 if ! command -v apt-get &> /dev/null || [ "$SKIP_APT_MIRROR" = "1" ]; then
@@ -215,6 +247,8 @@ fi
 # ------------------------------------------------------------------
 # 步骤 5: 检查前置依赖
 # ------------------------------------------------------------------
+step_end 4 "apt 源测速优化"
+step_begin
 echo -e "${YELLOW}[5/11] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
@@ -348,6 +382,8 @@ fi
 # ------------------------------------------------------------------
 # 步骤 6: 安装 Bun 运行时
 # ------------------------------------------------------------------
+step_end 5 "检查前置依赖"
+step_begin
 echo -e "${YELLOW}[6/11] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
@@ -440,6 +476,8 @@ export PATH="$HOME/.bun/bin:$PATH"
 # ------------------------------------------------------------------
 # 步骤 7: 安装 OpenCode
 # ------------------------------------------------------------------
+step_end 6 "安装 Bun 运行时"
+step_begin
 echo -e "${YELLOW}[7/11] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
@@ -471,6 +509,8 @@ fi
 # ------------------------------------------------------------------
 # 步骤 8: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
+step_end 7 "安装 OpenCode"
+step_begin
 echo -e "${YELLOW}[8/11] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
@@ -566,6 +606,8 @@ rm -f "$OMO_PATCH_FILE"
 # ------------------------------------------------------------------
 # 步骤 9: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
+step_end 8 "安装 oh-my-openagent 插件"
+step_begin
 echo -e "${YELLOW}[9/11] 安装 GSD Core 工作流...${NC}"
 
 # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
@@ -593,6 +635,8 @@ fi
 # ------------------------------------------------------------------
 # 步骤 10: 安装 CodeGraph MCP（代码图索引）
 # ------------------------------------------------------------------
+step_end 9 "安装 GSD Core 工作流"
+step_begin
 echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
 
 if command -v codegraph &> /dev/null; then
@@ -637,6 +681,8 @@ echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
 # 步骤 11: 安装 RTK（Rust Token Killer，压缩命令输出节省 Token）
 # 零认证：版本号走 api.github.com，下载走镜像链（gh-proxy → ghfast → 官方直连）
 # ------------------------------------------------------------------
+step_end 10 "安装 CodeGraph MCP"
+step_begin
 echo -e "${YELLOW}[11/11] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
 
 if command -v rtk &> /dev/null; then
@@ -702,6 +748,8 @@ fi
 # 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
 # shellcheck source=/dev/null
 . "$HOME/.bashrc" 2>/dev/null || true
+
+step_end 11 "安装 RTK"
 
 # ------------------------------------------------------------------
 # 完成
