@@ -38,7 +38,7 @@ echo ""
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[1/8] 检测已有配置...${NC}"
+echo -e "${YELLOW}[1/9] 检测已有配置...${NC}"
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
@@ -61,7 +61,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 2: 创建目录结构
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[2/8] 创建配置目录...${NC}"
+echo -e "${YELLOW}[2/9] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
@@ -71,7 +71,7 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 # 步骤 3: 生成配置文件
 # ------------------------------------------------------------------
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
-  echo -e "${YELLOW}[3/8] 生成配置文件...${NC}"
+  echo -e "${YELLOW}[3/9] 生成配置文件...${NC}"
 
   # opencode.json
   cat > "$CONFIG_DIR/opencode.json" << EOF
@@ -97,6 +97,17 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
     "external_directory": {
       "~/.config/opencode/*": "allow",
       "~/.claude/*": "allow"
+    }
+  },
+  "mcp": {
+    "codegraph": {
+      "type": "local",
+      "command": [
+        "codegraph",
+        "serve",
+        "--mcp"
+      ],
+      "enabled": true
     }
   }
 }
@@ -155,7 +166,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 4: 检查前置依赖
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[4/8] 检查前置依赖...${NC}"
+echo -e "${YELLOW}[4/9] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
@@ -216,7 +227,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[5/8] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[5/9] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   local bun_cmd=""
@@ -284,7 +295,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # ------------------------------------------------------------------
 # 步骤 6: 安装 OpenCode
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[6/8] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[6/9] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
 export PATH="$HOME/.bun/bin:$PATH"
@@ -315,7 +326,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 7: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[7/8] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[7/9] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -328,7 +339,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 8: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[8/8] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[8/9] 安装 GSD Core 工作流...${NC}"
 
 # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
 if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
@@ -351,6 +362,26 @@ else
     echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
   fi
 fi
+
+# ------------------------------------------------------------------
+# 步骤 9: 安装 CodeGraph MCP（代码图索引）
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[9/9] 安装 CodeGraph MCP...${NC}"
+
+if command -v codegraph &> /dev/null; then
+  echo -e "${GREEN}✓ codegraph 已存在${NC}"
+else
+  if command -v npm &> /dev/null; then
+    npm i -g @colbymchenry/codegraph 2>&1 | tail -2
+    echo -e "${GREEN}✓ codegraph 安装完成${NC}"
+  else
+    echo -e "${YELLOW}⚠ npm 未安装，跳过 codegraph${NC}"
+    echo "  手动安装: npm i -g @colbymchenry/codegraph"
+  fi
+fi
+
+echo -e "${BLUE}  在项目目录运行 'codegraph init' 生成索引${NC}"
+echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
 
 # 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
 # shellcheck source=/dev/null
@@ -389,6 +420,7 @@ echo "  OpenCode:     $CONFIG_DIR/opencode.json"
 echo "  模型路由:     $CONFIG_DIR/oh-my-openagent.json"
 echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
 echo "  GSD 工作流:   $GSD_DIR"
+echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
 echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
 echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
