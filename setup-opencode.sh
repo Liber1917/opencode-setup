@@ -4,6 +4,12 @@
 # 使用 Bun 作为运行时，自动安装所有依赖
 # 支持 Linux / macOS / WSL
 # ============================================================================
+
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "检测到非 bash 环境，自动以 bash 重新执行..."
+  exec bash "$0" "$@"
+fi
+
 set -e
 
 RED='\033[0;31m'
@@ -204,21 +210,33 @@ fi
 echo -e "${YELLOW}[5/8] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
-  if command -v bun &> /dev/null; then
-    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
-    return 0
-  fi
-  if [ -f "$HOME/.bun/bin/bun" ]; then
+  local bun_cmd=""
+  if command -v bun >/dev/null 2>&1; then
+    bun_cmd="bun"
+  elif [ -f "$HOME/.bun/bin/bun" ]; then
     export PATH="$HOME/.bun/bin:$PATH"
-    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
-    return 0
+    bun_cmd="$HOME/.bun/bin/bun"
+  elif [ -f "/usr/local/bin/bun" ]; then
+    bun_cmd="/usr/local/bin/bun"
   fi
-  if [ -f "/usr/local/bin/bun" ]; then
-    echo -e "${GREEN}✓ Bun 已安装 ($(bun --version))${NC}"
+
+  if [ -n "$bun_cmd" ] && "$bun_cmd" --version >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Bun 已安装 ($("$bun_cmd" --version))${NC}"
     return 0
   fi
 
-  echo "正在安装 Bun..."
+  if [ -n "$bun_cmd" ]; then
+    echo -e "${YELLOW}⚠ 检测到损坏的 Bun，清理后重新安装...${NC}"
+    rm -f "$HOME/.bun/bin/bun" "$HOME/.bun/bin/bunx"
+  fi
+
+  echo "正在安装 Bun（优先 npm 镜像，失败回退官方脚本）..."
+  if npm i -g bun >/dev/null 2>&1 && command -v bun >/dev/null 2>&1 && bun --version >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Bun 安装成功 ($(bun --version))${NC}"
+    return 0
+  fi
+
+  echo -e "${YELLOW}⚠ npm 安装失败，回退官方安装脚本...${NC}"
   curl -fsSL https://bun.sh/install | bash
   if [ -f "$HOME/.bun/bin/bun" ]; then
     export PATH="$HOME/.bun/bin:$PATH"
