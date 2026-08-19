@@ -38,7 +38,7 @@ echo ""
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[1/9] 检测已有配置...${NC}"
+echo -e "${YELLOW}[1/10] 检测已有配置...${NC}"
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
@@ -61,7 +61,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 2: 创建目录结构
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[2/9] 创建配置目录...${NC}"
+echo -e "${YELLOW}[2/10] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
@@ -71,7 +71,7 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 # 步骤 3: 生成配置文件
 # ------------------------------------------------------------------
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
-  echo -e "${YELLOW}[3/9] 生成配置文件...${NC}"
+  echo -e "${YELLOW}[3/10] 生成配置文件...${NC}"
 
   # opencode.json
   cat > "$CONFIG_DIR/opencode.json" << EOF
@@ -166,7 +166,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 4: 检查前置依赖
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[4/9] 检查前置依赖...${NC}"
+echo -e "${YELLOW}[4/10] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
@@ -227,7 +227,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 5: 安装 Bun 运行时
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[5/9] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[5/10] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   local bun_cmd=""
@@ -295,7 +295,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # ------------------------------------------------------------------
 # 步骤 6: 安装 OpenCode
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[6/9] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[6/10] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
 export PATH="$HOME/.bun/bin:$PATH"
@@ -326,7 +326,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 7: 安装 oh-my-openagent 插件
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[7/9] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[7/10] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -421,7 +421,7 @@ rm -f "$OMO_PATCH_FILE"
 # ------------------------------------------------------------------
 # 步骤 8: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[8/9] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[8/10] 安装 GSD Core 工作流...${NC}"
 
 # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
 if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
@@ -448,7 +448,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 9: 安装 CodeGraph MCP（代码图索引）
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[9/9] 安装 CodeGraph MCP...${NC}"
+echo -e "${YELLOW}[9/10] 安装 CodeGraph MCP...${NC}"
 
 if command -v codegraph &> /dev/null; then
   echo -e "${GREEN}✓ codegraph 已存在${NC}"
@@ -464,6 +464,72 @@ fi
 
 echo -e "${BLUE}  在项目目录运行 'codegraph init' 生成索引${NC}"
 echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
+
+# ------------------------------------------------------------------
+# 步骤 10: 安装 RTK（Rust Token Killer，压缩命令输出节省 Token）
+# 零认证：版本号走 api.github.com，下载走镜像链（gh-proxy → ghfast → 官方直连）
+# ------------------------------------------------------------------
+echo -e "${YELLOW}[10/10] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
+
+if command -v rtk &> /dev/null; then
+  echo -e "${GREEN}✓ rtk 已安装 ($(rtk --version))${NC}"
+else
+  # 动态获取最新版本号（无需认证），失败则回退已知版本
+  RTK_VERSION="$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/rtk-ai/rtk/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+  [ -z "$RTK_VERSION" ] && RTK_VERSION="v0.45.0"
+
+  # 架构检测: x86_64 用 musl 静态二进制（零依赖），aarch64 用 gnu
+  RTK_ASSET=""
+  case "$(uname -m)" in
+    x86_64)  RTK_ASSET="rtk-x86_64-unknown-linux-musl.tar.gz" ;;
+    aarch64) RTK_ASSET="rtk-aarch64-unknown-linux-gnu.tar.gz" ;;
+    *) echo -e "${YELLOW}⚠ 不支持的架构 $(uname -m)，跳过 RTK 安装${NC}" ;;
+  esac
+
+  if [ -n "$RTK_ASSET" ]; then
+    RTK_URL="https://github.com/rtk-ai/rtk/releases/download/$RTK_VERSION/$RTK_ASSET"
+    RTK_TMP="$(mktemp -d)"
+    RTK_OK=0
+    # 镜像链（全部无认证）: gh-proxy.com → ghfast.top → 官方直连
+    for MIRROR in "https://gh-proxy.com/" "https://ghfast.top/" ""; do
+      echo -e "${BLUE}  尝试下载: ${MIRROR}${RTK_URL}${NC}"
+      if curl -fsSL --connect-timeout 12 --max-time 90 -o "$RTK_TMP/rtk.tar.gz" "${MIRROR}${RTK_URL}"; then
+        RTK_OK=1
+        break
+      fi
+    done
+
+    if [ "$RTK_OK" = "1" ] && tar -xzf "$RTK_TMP/rtk.tar.gz" -C "$RTK_TMP" && [ -f "$RTK_TMP/rtk" ]; then
+      # 优先 /usr/local/bin，非 root 回退 ~/.local/bin
+      if install -m 0755 "$RTK_TMP/rtk" /usr/local/bin/rtk 2>/dev/null; then
+        echo -e "${GREEN}✓ rtk 安装完成: $(rtk --version)${NC}"
+      else
+        mkdir -p "$HOME/.local/bin"
+        install -m 0755 "$RTK_TMP/rtk" "$HOME/.local/bin/rtk"
+        export PATH="$HOME/.local/bin:$PATH"
+        echo -e "${GREEN}✓ rtk 安装完成: $(rtk --version)（~/.local/bin）${NC}"
+      fi
+    else
+      echo -e "${YELLOW}⚠ rtk 下载失败（网络受限时可手动从 https://github.com/rtk-ai/rtk/releases 下载）${NC}"
+    fi
+    rm -rf "$RTK_TMP"
+  fi
+fi
+
+# OpenCode 集成（幂等，无认证）
+if command -v rtk &> /dev/null; then
+  if [ -f "$CONFIG_DIR/plugins/rtk.ts" ]; then
+    echo -e "${BLUE}  - rtk opencode 插件已存在，跳过 init${NC}"
+  else
+    printf 'n\n' | rtk init --opencode -g >/dev/null 2>&1 || true
+    if [ -f "$CONFIG_DIR/plugins/rtk.ts" ]; then
+      echo -e "${GREEN}✓ rtk opencode 插件安装完成（重启 OpenCode 后自动压缩命令输出）${NC}"
+    else
+      echo -e "${YELLOW}⚠ rtk init 失败，可手动执行: rtk init --opencode -g${NC}"
+    fi
+  fi
+  rtk telemetry disable >/dev/null 2>&1 || true
+fi
 
 # 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
 # shellcheck source=/dev/null

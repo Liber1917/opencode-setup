@@ -22,6 +22,7 @@ cd opencode-setup
 - **npm 镜像加速** — 默认 npmmirror，国内网络下安装飞快，可用环境变量覆盖
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
 - **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
+- **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
 - **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
@@ -33,6 +34,7 @@ cd opencode-setup
 ├── opencode.json           ←  Provider + MCP（gsd/codegraph）+ 插件配置（oh-my-openagent + superpowers）
 ├── oh-my-openagent.json    ←  Agent 模型路由
 ├── node_modules/           ←  oh-my-openagent + superpowers 插件
+├── plugins/                ←  rtk.ts（命令输出压缩）
 ├── command/                ←  GSD Core 命令（/gsd-* 斜杠命令）
 ├── agents/                 ←  GSD Core 子 Agent
 └── skills/                 ←  技能链接库
@@ -46,7 +48,7 @@ cd opencode-setup
 
 ## 使用方式
 
-安装脚本按 9 步执行：
+安装脚本按 10 步执行：
 
 1. 检测非 bash 环境并自动切换
 2. 检测已有配置并备份
@@ -57,6 +59,7 @@ cd opencode-setup
 7. 安装 oh-my-openagent 插件
 8. 安装 GSD Core 工作流（npx 官方安装器）
 9. 安装 CodeGraph CLI
+10. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
 
 ### 自定义路径
 
@@ -137,7 +140,7 @@ oh-my-openagent 使用源码内置的默认模型 + 回退链，开箱即用。
 
 不设 model = 使用内置默认，优先级：
 ```
-agent model > category model > 用户 fallback_models > 源码内置回退链 > OpenCode 默认
+agent model > category model > 用户 fallback_models > OpenCode 默认 model > 源码内置回退链
 ```
 
 ## Agent 一览
@@ -191,11 +194,34 @@ codegraph init        # 生成 .codegraph/ 索引（之后自动增量同步）
 
 重启 OpenCode 后 `codegraph_explore` 等工具生效。无索引的目录中 MCP 自动休眠，不影响其他工具。
 
+## RTK（Token 节省）
+
+脚本安装 RTK 并注册 OpenCode 插件（`~/.config/opencode/plugins/rtk.ts`）。插件在 bash 工具执行前拦截命令，重写为 `rtk` 等价命令，输出进入 LLM 前被压缩（git/test/build 等常见命令节省 60-90% Token）。
+
+```bash
+rtk gain          # 查看累计节省统计
+rtk discover      # 发现未被覆盖的命令
+rtk init --opencode -g   # 重装/修复 OpenCode 插件
+```
+
+RTK 安装走镜像链（gh-proxy.com → ghfast.top → 官方直连），无需 GitHub 认证。重启 OpenCode 后生效。内置工具（Read/Grep/Glob 等）不走 bash hook，不受影响；命令失败时完整原始输出保存在 `~/.local/share/rtk/tee/` 可追溯。
+
 ## 常见问题
 
 ### 国内网络安装慢
 
-脚本已默认使用 npmmirror 镜像（npm/npx/bun 全部走镜像）。Bun 安装优先走 npm 镜像，不再依赖 GitHub。node 安装仍走 nodesource，若也慢请手动安装 node 后重跑脚本。
+脚本已默认使用 npmmirror 镜像（npm/npx/bun 全部走镜像）。Bun 安装优先走 npm 镜像，不再依赖 GitHub。node 安装仍走 nodesource，若也慢请手动安装 node 后重跑脚本。RTK 下载走 GitHub 代理镜像链（gh-proxy.com → ghfast.top → 官方直连），任一源可用即成功。
+
+### RTK 未生效
+
+重启 OpenCode 后插件才加载。验证：
+
+```bash
+rtk --version     # 应显示 rtk 0.45.x
+ls ~/.config/opencode/plugins/rtk.ts   # 插件文件存在
+```
+
+若插件文件缺失，手动执行 `rtk init --opencode -g`。
 
 ### `node: not found`
 
