@@ -334,7 +334,7 @@ else
   echo -e "${BLUE}  - ~/.npmrc 已有 registry 配置，跳过${NC}"
 fi
 
-# Python 生态: 无 pip 则用 ensurepip 引导, 再配置清华 PyPI 镜像
+# Python 生态: 无 pip 则用 ensurepip 引导, pip 可用时才配置清华 PyPI 镜像
 if command -v python3 &> /dev/null; then
   PIP_READY=0
   if python3 -m pip --version &> /dev/null; then
@@ -345,22 +345,23 @@ if command -v python3 &> /dev/null; then
       PIP_READY=1
       echo -e "${GREEN}✓ pip 引导完成 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
     else
-      echo -e "${YELLOW}⚠ ensurepip 失败（可用 sudo apt install python3-pip 手动安装，pip.conf 已预置）${NC}"
+      echo -e "${YELLOW}⚠ ensurepip 失败（可手动执行: sudo apt install python3-pip）${NC}"
     fi
   fi
 
-  PIP_CONF="$HOME/.config/pip/pip.conf"
-  if [ -f "$HOME/.pip/pip.conf" ]; then
-    PIP_CONF="$HOME/.pip/pip.conf"
+  if [ "$PIP_READY" = "1" ]; then
+    PIP_CONF="$HOME/.config/pip/pip.conf"
+    if [ -f "$HOME/.pip/pip.conf" ]; then
+      PIP_CONF="$HOME/.pip/pip.conf"
+    fi
+    if ! grep -q "index-url" "$PIP_CONF" 2>/dev/null; then
+      mkdir -p "$(dirname "$PIP_CONF")"
+      printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > "$PIP_CONF"
+      echo -e "${GREEN}✓ PyPI 镜像源已配置 (清华, $PIP_CONF)${NC}"
+    else
+      echo -e "${BLUE}  - pip 已有 index-url 配置，跳过${NC}"
+    fi
   fi
-  if ! grep -q "index-url" "$PIP_CONF" 2>/dev/null; then
-    mkdir -p "$(dirname "$PIP_CONF")"
-    printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > "$PIP_CONF"
-    echo -e "${GREEN}✓ PyPI 镜像源已配置 (清华, $PIP_CONF)${NC}"
-  else
-    echo -e "${BLUE}  - pip 已有 index-url 配置，跳过${NC}"
-  fi
-  [ "$PIP_READY" = "1" ] && echo -e "${GREEN}✓ pip 可用 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
 fi
 
 # ------------------------------------------------------------------

@@ -83,7 +83,7 @@ export NPM_REGISTRY=https://registry.npmjs.org
 
 脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。pip 同样不覆盖已有 `index-url` 的配置。
 
-node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则预置 pip.conf 供后续安装生效），PyPI 源默认清华镜像，写入 `~/.config/pip/pip.conf`（兼容 `~/.pip/pip.conf`）。
+node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则提示手动安装，不写入配置），仅当 pip 可用时才写入清华 PyPI 源（`~/.config/pip/pip.conf`，兼容 `~/.pip/pip.conf`）。
 
 ### apt 源优化控制
 
