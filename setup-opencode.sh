@@ -81,14 +81,6 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
     "oh-my-openagent@latest",
     "superpowers@git+https://github.com/obra/superpowers.git"
   ],
-  "provider": {
-    "anthropic": {
-      "options": {
-        "apiKey": "YOUR_API_KEY_HERE",
-        "baseURL": "https://api.anthropic.com"
-      }
-    }
-  },
   "permission": {
     "read": {
       "~/.config/opencode/*": "allow",
@@ -97,17 +89,6 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
     "external_directory": {
       "~/.config/opencode/*": "allow",
       "~/.claude/*": "allow"
-    }
-  },
-  "mcp": {
-    "codegraph": {
-      "type": "local",
-      "command": [
-        "codegraph",
-        "serve",
-        "--mcp"
-      ],
-      "enabled": true
     }
   }
 }
@@ -618,11 +599,34 @@ if command -v codegraph &> /dev/null; then
   echo -e "${GREEN}✓ codegraph 已存在${NC}"
 else
   if command -v npm &> /dev/null; then
-    npm i -g @colbymchenry/codegraph 2>&1 | tail -2
-    echo -e "${GREEN}✓ codegraph 安装完成${NC}"
+    echo -e "${YELLOW}正在安装 codegraph...${NC}"
+    if npm i -g @colbymchenry/codegraph >/dev/null 2>&1 && command -v codegraph &> /dev/null; then
+      echo -e "${GREEN}✓ codegraph 安装完成${NC}"
+    else
+      echo -e "${YELLOW}⚠ codegraph 安装失败，跳过 MCP 注册${NC}"
+      echo "  手动安装: npm i -g @colbymchenry/codegraph"
+      echo "  装好后重新运行脚本即可注册 MCP"
+    fi
   else
     echo -e "${YELLOW}⚠ npm 未安装，跳过 codegraph${NC}"
     echo "  手动安装: npm i -g @colbymchenry/codegraph"
+  fi
+fi
+
+# codegraph 可用时才注册 MCP（避免 opencode 启动报 Executable not found）
+if command -v codegraph &> /dev/null && [ -f "$CONFIG_DIR/opencode.json" ]; then
+  if node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const c = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (c.mcp && c.mcp.codegraph) process.exit(0);
+    c.mcp = c.mcp || {};
+    c.mcp.codegraph = { type: "local", command: ["codegraph", "serve", "--mcp"], enabled: true };
+    fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
+  ' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
+    echo -e "${GREEN}✓ codegraph MCP 已注册到 opencode.json${NC}"
+  else
+    echo -e "${YELLOW}⚠ codegraph MCP 注册失败，可手动添加${NC}"
   fi
 fi
 
@@ -709,12 +713,12 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}下一步:${NC}"
 echo ""
-echo "  1. 编辑 API 密钥:"
+echo "  1. 如需 API 提供商，编辑 opencode.json 添加 provider 配置:"
 echo "     $EDITOR $CONFIG_DIR/opencode.json"
-echo "     将 YOUR_API_KEY_HERE 替换为你的 API 密钥"
+echo "     e.g. {\"provider\":{\"anthropic\":{\"options\":{\"apiKey\":\"sk-...\"}}}}"
 echo ""
-echo "  2. 如使用 DeepSeek 等兼容 API，修改 baseURL:"
-echo '     "baseURL": "https://api.deepseek.com/anthropic"'
+echo "  2. 如使用 DeepSeek 等兼容 API，baseURL 填:"
+echo '     "https://api.deepseek.com/anthropic"'
 echo ""
 echo "  3. 调整模型路由（可选）:"
 echo "     $EDITOR $CONFIG_DIR/oh-my-openagent.json"

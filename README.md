@@ -34,7 +34,7 @@ cd opencode-setup
 
 ```
 ~/.config/opencode/
-├── opencode.json           ←  Provider + MCP（gsd/codegraph）+ 插件配置（oh-my-openagent + superpowers）
+├── opencode.json           ←  MCP（codegraph，安装成功时自动注册）+ 插件配置（oh-my-openagent + superpowers）
 ├── oh-my-openagent.json    ←  Agent 模型路由
 ├── node_modules/           ←  oh-my-openagent + superpowers 插件
 ├── plugins/                ←  rtk.ts（命令输出压缩）
@@ -55,7 +55,7 @@ cd opencode-setup
 
 1. 检测非 bash 环境并自动切换
 2. 检测已有配置并备份
-3. 生成 opencode.json（含 codegraph MCP）/ oh-my-openagent.json / Claude settings
+3. 生成 opencode.json / oh-my-openagent.json / Claude settings
 4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
 5. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
 6. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
@@ -203,7 +203,7 @@ GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD �
 
 ## CodeGraph
 
-脚本会在 opencode.json 中注册 codegraph MCP 并安装 CLI。索引按项目启用：
+脚本会安装 codegraph CLI（`@colbymchenry/codegraph`），安装成功后才在 opencode.json 中注册 MCP（避免启动报 Executable not found）。安装失败不会注册，装好后重新运行脚本即可。索引按项目启用：
 
 ```bash
 cd your-project
