@@ -337,7 +337,7 @@ else
 fi
 
 echo -e "${YELLOW}应用 omo 模型跟随补丁...${NC}"
-OMO_PATCH_FILE="$(mktemp)"
+OMO_PATCH_FILE="$(mktemp /tmp/omo-patch.XXXXXX.mjs)"
 cat > "$OMO_PATCH_FILE" << 'OMO_PATCH_EOF'
 import { readFileSync, writeFileSync } from "node:fs";
 
