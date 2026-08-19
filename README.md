@@ -7,6 +7,8 @@
 curl -fsSL "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" | bash
 ```
 
+> **开发者**：仓库自带 `.opencode/skills/docker-test-setup` skill——修改脚本后用它跑 Docker 容器矩阵回归（22.04/24.04 全流程、断网降级、幂等）。在 OpenCode 中执行 `/docker-test-setup` 获取完整测试命令与断言清单。
+
 或克隆后运行：
 
 ```bash
