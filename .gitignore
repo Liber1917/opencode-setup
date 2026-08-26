@@ -1,0 +1,4 @@
+.omo/
+.playwright-mcp/
+.codegraph/
+*.png

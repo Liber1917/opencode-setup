@@ -36,7 +36,7 @@ step_summary() {
   echo -e "${YELLOW}=== 各环节耗时 ===${NC}"
   for i in $(seq 1 11); do
     [ -z "${STEP_TIMES[$i]:-}" ] && continue
-    printf "  [%s/11] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
+    printf "  [%s/12] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
     total=$(( total + STEP_TIMES[$i] ))
   done
   echo -e "${YELLOW}总耗时: ${total}s${NC}"
@@ -79,7 +79,7 @@ fi
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[1/11] 检测已有配置...${NC}"
+echo -e "${YELLOW}[1/12] 检测已有配置...${NC}"
 step_begin
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
@@ -105,7 +105,7 @@ fi
 # ------------------------------------------------------------------
 step_end 1 "检测已有配置"
 step_begin
-echo -e "${YELLOW}[2/11] 创建配置目录...${NC}"
+echo -e "${YELLOW}[2/12] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
@@ -117,7 +117,7 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 step_end 2 "创建配置目录"
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   step_begin
-  echo -e "${YELLOW}[3/11] 生成配置文件...${NC}"
+  echo -e "${YELLOW}[3/12] 生成配置文件...${NC}"
 
   # opencode.json
   cat > "$CONFIG_DIR/opencode.json" << EOF
@@ -195,7 +195,7 @@ fi
 # 步骤 4: apt 源测速优化（仅 apt 系系统；官方最快则不动，已自定义则跳过）
 # ------------------------------------------------------------------
 step_begin
-echo -e "${YELLOW}[4/11] apt 源测速优化...${NC}"
+echo -e "${YELLOW}[4/12] apt 源测速优化...${NC}"
 
 if ! command -v apt-get &> /dev/null || [ "$SKIP_APT_MIRROR" = "1" ]; then
   echo -e "${BLUE}  - 非 apt 系统或已跳过（SKIP_APT_MIRROR=1），跳过源优化${NC}"
@@ -267,7 +267,7 @@ fi
 # ------------------------------------------------------------------
 step_end 4 "apt 源测速优化"
 step_begin
-echo -e "${YELLOW}[5/11] 检查前置依赖...${NC}"
+echo -e "${YELLOW}[5/12] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
@@ -402,7 +402,7 @@ fi
 # ------------------------------------------------------------------
 step_end 5 "检查前置依赖"
 step_begin
-echo -e "${YELLOW}[6/11] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[6/12] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   local bun_cmd=""
@@ -496,7 +496,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # ------------------------------------------------------------------
 step_end 6 "安装 Bun 运行时"
 step_begin
-echo -e "${YELLOW}[7/11] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[7/12] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
 export PATH="$HOME/.bun/bin:$PATH"
@@ -529,7 +529,7 @@ fi
 # ------------------------------------------------------------------
 step_end 7 "安装 OpenCode"
 step_begin
-echo -e "${YELLOW}[8/11] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[8/12] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -626,7 +626,7 @@ rm -f "$OMO_PATCH_FILE"
 # ------------------------------------------------------------------
 step_end 8 "安装 oh-my-openagent 插件"
 step_begin
-echo -e "${YELLOW}[9/11] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[9/12] 安装 GSD Core 工作流...${NC}"
 
 # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
 if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
@@ -655,7 +655,7 @@ fi
 # ------------------------------------------------------------------
 step_end 9 "安装 GSD Core 工作流"
 step_begin
-echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
+echo -e "${YELLOW}[10/12] 安装 CodeGraph MCP...${NC}"
 
 CG_BIN="$(command -v codegraph 2>/dev/null || true)"
 if [ -z "$CG_BIN" ]; then
@@ -723,7 +723,7 @@ echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
 # ------------------------------------------------------------------
 step_end 10 "安装 CodeGraph MCP"
 step_begin
-echo -e "${YELLOW}[11/11] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
+echo -e "${YELLOW}[11/12] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
 
 if command -v rtk &> /dev/null; then
   echo -e "${GREEN}✓ rtk 已安装 ($(rtk --version))${NC}"
@@ -790,6 +790,65 @@ fi
 . "$HOME/.bashrc" 2>/dev/null || true
 
 step_end 11 "安装 RTK"
+
+# ------------------------------------------------------------------
+# 步骤 12: 安全/能力增强模块(可选, SKIP_SECURITY=1 跳过)
+# 依据 spec: E 方向六模块(权限红线/审计/安全自检/合规) + B 方向环境画像
+# e-modules/ 随仓库分发, 安装时部署到 CONFIG_DIR
+# ------------------------------------------------------------------
+step_begin
+echo -e "${YELLOW}[12/12] 安全与能力增强模块...${NC}"
+
+MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
+
+if [ "$SKIP_SECURITY" = "1" ]; then
+  echo -e "${BLUE}  - 已跳过（SKIP_SECURITY=1）${NC}"
+elif [ -d "$(dirname "$0")/e-modules" ]; then
+  # 部署 e-modules 到配置目录
+  mkdir -p "$MOD_DIR" "$MOD_DIR/devcontainer"
+  cp "$(dirname "$0")/e-modules/"*.sh "$MOD_DIR/" 2>/dev/null
+  cp "$(dirname "$0")/e-modules/devcontainer/"*.json "$(dirname "$0")/e-modules/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
+  chmod +x "$MOD_DIR"/*.sh 2>/dev/null
+
+  echo -e "${BLUE}  - e-modules 已部署到 $MOD_DIR${NC}"
+
+  # ① 权限红线(merge 进 opencode.json 的 permission 段)
+  if command -v python3 >/dev/null 2>&1; then
+    "$MOD_DIR/gen-permissions.sh" /tmp/.perm.json >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" << 'PYEOF'
+import json,sys
+p=sys.argv[1]
+try:
+    c=json.load(open(p))
+except: c={"$schema":"https://opencode.ai/config.json"}
+try:
+    perm=json.load(open('/tmp/.perm.json'))['permission']
+    c['permission']=perm
+    json.dump(c,open(p,'w'),ensure_ascii=False,indent=2)
+    print("OK")
+except Exception as e:
+    print(f"SKIP:{e}")
+PYEOF
+    echo -e "${GREEN}  ✓ 权限红线已合并到 opencode.json${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ 无 python3，跳过权限合并（可手动运行 $MOD_DIR/gen-permissions.sh）${NC}"
+  fi
+
+  # ② 审计
+  "$MOD_DIR/audit-init.sh" init >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 审计模块已初始化（JSONL+脱敏+熔断+30天轮转）${NC}"
+
+  # ③ 安全自检 + AGENT-CARD
+  "$MOD_DIR/security-check.sh" 2>&1 | tail -3 | sed 's/^/  /' || true
+
+  # ④ 合规文档
+  "$MOD_DIR/gen-compliance.sh" 2>/dev/null | sed 's/^/  /' || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
+
+  echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"
+  echo -e "${BLUE}    模块: $MOD_DIR (权限红线/审计/自检/合规)${NC}"
+else
+  echo -e "${YELLOW}  ⚠ 未找到 e-modules（源码仓库外运行?）——跳过增强模块${NC}"
+fi
+
+step_end 12 "安全与能力增强"
 
 # ------------------------------------------------------------------
 # 完成
