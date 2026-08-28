@@ -14,10 +14,7 @@ cat > "$OUT" << 'EOF'
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "comment": "E-Ⅰ 权限红线: deny-first 于高危通道, 白名单放行只读; 弹窗目标=常规会话零弹窗",
-
     "edit": {
-      "comment": "edit 限 workspace — 堵 Tier-2 盲区(状态文件经 Edit 工具绕过 bash 审计的教训, Claude auto mode 36.8%)",
       "~/.config/opencode/**": "allow",
       "~/.claude/**": "allow",
       "/etc/**": "deny",
@@ -28,14 +25,8 @@ cat > "$OUT" << 'EOF'
       "~/.config/opencode/oh-my-openagent.json": "deny",
       "~/.config/opencode/settings.json": "deny"
     },
-
-    "webfetch": {
-      "comment": "网络按需; 出网走 ask (一次批准会话内生效, opencode 原生)",
-      "*": "ask"
-    },
-
+    "webfetch": "ask",
     "bash": {
-      "comment": "=== 硬 deny 位(不可被用户级 allow 覆盖; deny 求值优先) ===",
       "rm -rf *": "deny",
       "rm -fr *": "deny",
       "git push --force*": "deny",
@@ -50,22 +41,16 @@ cat > "$OUT" << 'EOF'
       "wget*|*sh": "deny",
       "sudo rm*": "deny",
       ":(){ :|:& };:": "deny",
-
-      "comment2": "=== 敏感文件写(密钥治理联动) ===",
       "cat >> ~/.ssh/authorized_keys*": "deny",
       "echo*>> ~/.bashrc": "deny",
       "echo*>> ~/.zshrc": "deny",
       "crontab -r*": "deny",
-
-      "comment3": "=== 花钱/发布通道: ask(escalation 语义 — 带 justification 单次放行, 授权不持久) ===",
       "git push": "ask",
       "npm publish*": "ask",
       "pip upload*": "ask",
       "docker push*": "ask",
       "gh release create*": "ask",
       "gh pr merge*": "ask",
-
-      "comment4": "=== 只读白名单(零弹窗目标的主承载) ===",
       "ls*": "allow",
       "cat*": "allow",
       "head*": "allow",
@@ -89,8 +74,6 @@ cat > "$OUT" << 'EOF'
       "du*": "allow",
       "ps*": "allow",
       "uname*": "allow",
-
-      "comment5": "=== 其余 bash: ask(宽带放行的边界兜底) ===",
       "*": "ask"
     }
   }
