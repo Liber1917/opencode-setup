@@ -1,0 +1,127 @@
+# Instincts generated from https://github.com/Liber1917/opencode-setup
+# Generated: 2026-08-28T00:45:31.696Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: opencode-setup-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, docs
+
+## Evidence
+
+- 3 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: 五方向定稿实装 - 步骤12安全/能力增强模块 + E模块落地 + 验证体系 + C/A定稿, docs: 设计资产入库 - 五方向规格/认知报告/拓扑即控制/语言规范token效率(含HTML+MD双格式)
+
+---
+id: opencode-setup-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Commit Length
+
+## Action
+
+Write moderate-length commit messages (~59 characters)
+
+## Evidence
+
+- Average commit message length: 59 chars
+- Based on 3 commits
+
+---
+id: opencode-setup-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Naming Files
+
+## Action
+
+Use kebab-case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: kebab-case
+
+---
+id: opencode-setup-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: opencode-setup-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: opencode-setup-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Liber1917/opencode-setup
+---
+
+# Opencode Setup Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
