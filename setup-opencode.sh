@@ -840,7 +840,7 @@ PYEOF
   "$MOD_DIR/security-check.sh" 2>&1 | tail -3 | sed 's/^/  /' || true
 
   # ④ 合规文档
-  "$MOD_DIR/gen-compliance.sh" 2>/dev/null | sed 's/^/  /' || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
+  "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
 
   echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"
   echo -e "${BLUE}    模块: $MOD_DIR (权限红线/审计/自检/合规)${NC}"
