@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拓扑即控制 — 多 Agent-人协作的新理论框架(研究方向)</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --card:#fff; --ink:#1a1a1a; --muted:#6b6b6b; --line:#e5e4e0;
+    --accent:#0f766e; --accent-soft:#f0fdfa;
+    --blue:#2563eb; --blue-soft:#eff6ff;
+    --amber:#b45309; --amber-soft:#fffbeb;
+    --red:#b91c1c; --red-soft:#fef2f2;
+    --violet:#6d28d9; --violet-soft:#f5f3ff;
+    --radius:12px; --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.65;font-size:15px}
+  header.top{background:linear-gradient(135deg,#134e4a 0%,#0f766e 55%,#14b8a6 100%);color:#fff;padding:38px 24px 26px;text-align:center}
+  header.top h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+  header.top p.sub{margin-top:8px;opacity:.88;font-size:14px}
+  header.top .badges{margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  header.top .badges span{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:3px 12px;font-size:12px}
+  nav.tabs{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;justify-content:center;gap:8px;padding:10px 16px}
+  nav.tabs button{border:1px solid var(--line);background:var(--card);color:var(--muted);padding:8px 22px;border-radius:999px;font-size:14px;cursor:pointer;transition:all .15s}
+  nav.tabs button:hover{border-color:var(--accent);color:var(--accent)}
+  nav.tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  main{max-width:940px;margin:0 auto;padding:26px 20px 80px}
+  section.tab-page{display:none}
+  section.tab-page.active{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 26px;margin-bottom:24px}
+  .card h2{font-size:20px;display:flex;align-items:center;gap:10px;padding-bottom:12px;margin-bottom:14px;border-bottom:2px solid var(--accent-soft)}
+  .card h2 .tag{font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .card h2 .tag.blue{background:var(--blue-soft);color:var(--blue)}
+  .card h2 .tag.amber{background:var(--amber-soft);color:var(--amber)}
+  .card h2 .tag.red{background:var(--red-soft);color:var(--red)}
+  .card h2 .tag.violet{background:var(--violet-soft);color:var(--violet)}
+  .card h3{font-size:16px;margin:18px 0 8px}
+  .card p{margin:8px 0}
+  .card ul{margin:8px 0 8px 22px}
+  .card li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:#fafaf8;font-weight:600;white-space:nowrap}
+  tr:nth-child(even) td{background:#fcfcfa}
+  mark{background:#fef9c3;padding:0 3px;border-radius:3px}
+  blockquote{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  blockquote.insight{border-color:var(--violet);background:var(--violet-soft)}
+  blockquote.warn{border-color:var(--red);background:var(--red-soft)}
+  blockquote strong{display:block;margin-bottom:2px}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;margin-right:4px}
+  .pill.ok{background:#f0fdf4;color:#15803d}
+  .pill.gap{background:var(--red-soft);color:var(--red)}
+  .pill.taken{background:var(--amber-soft);color:var(--amber)}
+  pre{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:14px 18px;overflow-x:auto;font-size:13px;line-height:1.55;margin:10px 0}
+  code{font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace}
+  .tldr-hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#e2e8f0;border-radius:var(--radius);padding:26px 30px;margin-bottom:24px}
+  .tldr-hero .main-line{font-size:17px;font-weight:600;color:#fff;line-height:1.6}
+  .tldr-hero .sub{margin-top:10px;font-size:14px;color:#94a3b8}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:30px 20px 40px}
+  .src{color:var(--accent);text-decoration:none;font-size:13px}
+  .src:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>🎛️ 拓扑即控制 — 多 Agent-人协作的新理论框架</h1>
+  <p class="sub">假说:多人多 agent 拓扑不是组织学问题,是分布式控制 + 语义容错问题 · 研究方向提案</p>
+  <div class="badges">
+    <span>假说 1:网络优化视角</span>
+    <span>假说 2:控制科学引入</span>
+    <span>新层:语义容错</span>
+    <span>2026-08</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="tldr" class="active">⚡ 简略版</button>
+  <button data-tab="full">📖 详细版</button>
+</nav>
+
+<main>
+
+<!-- ============ 简略版 ============ -->
+<section class="tab-page active" id="tldr">
+
+  <div class="tldr-hero">
+    <div class="main-line">agent 群不需要"组织架构图",需要的是<b>控制结构</b>:人 = 监督控制器,agent 群 = 受控对象,红线 = 安全联锁,token/注意力 = 控制输入,审计 = 反馈信号。</div>
+    <div class="sub">照搬人类组织(部门/CEO/例会)是叙事需求;正确的拓扑词汇来自控制科学与网络理论,外加一层 agent 特有的"语义容错"。</div>
+  </div>
+
+  <div class="card">
+    <h2>🧩 两个假说,一句话各说清</h2>
+    <table>
+      <tr><th>假说</th><th>内容</th><th>检索验证结果</th></tr>
+      <tr>
+        <td><b>① 网络优化问题</b></td>
+        <td>通信路由 / token 带宽 / 拓扑权衡,可借分布式系统与网络科学理论</td>
+        <td><span class="pill ok">✅ 部分成立</span>骨架已有(r-robustness、稀疏拓扑实证),但缺 agent 特有层</td>
+      </tr>
+      <tr>
+        <td><b>② 控制科学引入</b></td>
+        <td>可观性/可控性/监督控制/安全联锁,人当 supervisory controller</td>
+        <td><span class="pill ok">✅ 高度成立</span>可控性/可观性/稳定性论文已立论,但<mark>无人整合人类监督者</mark></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>🆕 为什么还需要新的一层:语义容错</h2>
+    <ul>
+      <li><b>经典容错假设错误是随机的</b>(拜占庭/宕机),agent 的错误是<b>系统性语义错误</b>——幻觉、谄媚、过度自信。</li>
+      <li><b>最要命的:错误是相关的</b>——同源模型共故障率高达 60%(350+ 模型实测,arXiv 2506.07962),经典 BFT 的独立性假设<mark>系统性失效</mark>。</li>
+      <li><b>"语义拜占庭"已被命名</b>(EBFT, 2026-07, arXiv 2607.16109:"协议合规但语义错误")——但只用在区块链验证者场景,<b>没进拓扑设计,没进人类监督</b>。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>📊 竞争格局:哪些坑已被占,哪个是我们的</h2>
+    <table>
+      <tr><th>生态位</th><th>状态</th><th>占据者</th></tr>
+      <tr><td>控制理论 × agent(可控性/可观性)</td><td><span class="pill taken">已占</span></td><td>Caltech 提示控制论、观测性论文、PID 治理、ARC 多 agent(2606.30877)</td></tr>
+      <tr><td>语义故障形式化</td><td><span class="pill taken">刚被占(2026-07)</span></td><td>EBFT / Honest Quorum(2607.16109)</td></tr>
+      <tr><td>共识 × LLM agent</td><td><span class="pill taken">已占</span></td><td>Resilient Consensus(Anand & Pappas)、CP-WBFT、DecentLLMs</td></tr>
+      <tr><td>拓扑经验研究(稀疏最优/层级最韧)</td><td><span class="pill taken">已占</span></td><td>EMNLP 2025 传播框架、ICML 2025 韧性</td></tr>
+      <tr><td><b>人=监督控制器 + 语义故障 + 拓扑 联合设计</b></td><td><span class="pill gap">🟢 空白</span></td><td><b>无人在做——我们的差异化</b></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>🪜 三档拓扑阶梯(当下可落地的部分)</h2>
+    <table>
+      <tr><th>档位</th><th>拓扑</th><th>控制词汇</th><th>状态</th></tr>
+      <tr><td>1</td><td>人审计划(单 agent+人)</td><td>设定值批准:setpoint approval</td><td>✅ 现有 CLI 已验证(39% 计划拒绝率 vs 3% 命令)</td></tr>
+      <tr><td>2</td><td>lead+subagents 并行</td><td>分层控制 + 前馈</td><td>✅ 可跑(OpenCode task 工具+审批预设)</td></tr>
+      <tr><td>3</td><td>管理例外(人只看异常)</td><td>监督控制 + 安全联锁 + 拥塞式注意力调节</td><td>🔄 红线/审计可用权限系统表达;watchdog 等后台机制是空白</td></tr>
+    </table>
+    <blockquote class="insight">
+      <strong>💡 设计原则</strong>
+      用控制词汇(可观性/可控性/联锁)而不是组织词汇(团队/经理/例会)设计三档——将来理论就绪时能自然生长,不被组织隐喻锁死。
+    </blockquote>
+  </div>
+
+  <div class="card">
+    <h2>🚧 已确认的空白(可 claim 的贡献点)</h2>
+    <ul>
+      <li><b>内模原理 × LLM = 0 篇文献</b>(arXiv 全库检索)——人要有效监督 agent,心智模型须含 agent 失败模式,这个 50 年原理从未被搬过来。</li>
+      <li><b>拥塞控制(AIMD)未进 agent 拓扑</b>——Token Economics 只做了经济学类比;Symphony 的 stall_timeout/指数退避是无意识撞上了拥塞控制,没人形式化。</li>
+      <li><b>LOA 分级与可观性/可控性无形式化接口</b>——Sheridan 分级的 agent 化版本全是定性分级+界面层。</li>
+      <li><b>三篇最接近的先行者互不连通</b>:ARC 多 agent(无人类)、Resilient Consensus(无拓扑设计)、EBFT(无人类无拓扑)——联合设计无人做。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <blockquote class="insight">
+      <strong>📦 细分方向弹药库已就位(详细版第 6 区块)</strong>
+      12 个控制/通信细分方向 × 代表文献 × 三档适配:🟢 可直接借用 8 项(一致性/事件触发/排队论/FDD-FTC/CPS 安全/分层切片/RV/语义通信)· 🟡 需改造 7 项(SCT/CBF/NCS/信息率/混成/MFG/意见动力学)· ⚪ 仅供参考+已评估不收(GR(1)/模糊控制)。其中<b>语义容错四件套(FDD+CPS+语义通信+RV)构成"检测→隔离→重构→通信降级"完整闭环</b>。
+    </blockquote>
+  </div>
+
+  <div class="card">
+    <blockquote class="warn">
+      <strong>⚠️ 竞争风险(诚实声明)</strong>
+      "语义容错"概念与 EBFT(2026-07)高度重叠——差异化必须落在<b>语义容错 × 拓扑 × 人类监督的联合设计</b>,不能单提语义故障;"控制理论作安全层"也已被 Anand & Pappas 占据——我们的增量是<b>把人类 supervisory controller 与语义故障同时纳入闭环拓扑的联合可控性/可观性分析</b>。
+    </blockquote>
+  </div>
+
+</section>
+
+<!-- ============ 详细版 ============ -->
+<section class="tab-page" id="full">
+
+  <div class="card">
+    <h2>1️⃣ 命题与动机 <span class="tag">为何拓扑 = 权责载体</span></h2>
+    <ul>
+      <li><b>拓扑的本质</b>:一次性回答"谁决定、谁执行、谁兜底"——定好了每次交互不用重新谈判,定错了要么审批疲劳要么越权闯祸。</li>
+      <li><b>实证支撑(错误拓扑的代价)</b>:97% 命令级审批是橡皮图章(权责配错粒度);OPC 三大事故(watchdog 缺失/静默覆盖/造没人要的)全是兜底缺失——都是拓扑问题,不是模型问题。</li>
+      <li><b>拟人化陷阱</b>:照搬人类组织(部门/CEO/例会)在工程上系统性错位——agent 的故障模式是<mark>系统性语义错误</mark>(非宕机)、成本结构是 token(非薪资)、可靠性随模型更新跳变(非稳定员工)。</li>
+      <li><b>用户假说(本方向起点)</b>:多人多 agent/去中心化自治可能是<b>网络优化 + 分布式控制</b>问题;需要全新拓扑而非组织翻版。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>2️⃣ 假说 1:网络优化视角 <span class="tag blue">通信 / 带宽 / 拓扑权衡</span></h2>
+
+    <h3>成立的部分(骨架已有)</h3>
+    <table>
+      <tr><th>网络理论概念</th><th>agent 场景映射</th><th>已有研究</th></tr>
+      <tr><td>拓扑鲁棒性(r-robustness)</td><td>通信图设计条件:F 个拜占庭 agent 下诚实信息不中断</td><td>SAC(arXiv 2605.09076)把 LeBlanc 2013 图论条件引入 LLM-MAS——<b>最强先例</b></td></tr>
+      <tr><td>信息扩散 vs 错误传播</td><td>拓扑稀疏度权衡</td><td>EMNLP 2025 因果框架(arXiv 2505.23352):<b>中等稀疏最优</b></td></tr>
+      <tr><td>结构韧性</td><td>故障掉点率</td><td>ICML 2025(PMLR 267):<b>层级结构最韧</b>(5.5% vs 链式 23.7%)</td></tr>
+      <tr><td>规模退化</td><td>分布式原语任务</td><td>AgentsNet(arXiv 2507.08616):100 agent 时前沿模型性能趋零</td></tr>
+    </table>
+
+    <h3>不成立的部分(为什么不是纯网络问题)</h3>
+    <ul>
+      <li><b>节点非同构</b>:不同模型/能力/权限,故障模式是"幻觉"而非"宕机"。</li>
+      <li><b>节点非理性</b>:会谄媚(SIGDIAL 2026:谄媚在 agent 间传播,排名先验可降 10.5pp 误差)、会过度自信。</li>
+      <li><b>错误是语义的且相关的</b>:拜占庭假设错误独立随机;同源模型共故障率 60%(arXiv 2506.07962)——一个幻觉可能带动一群(同源模型),经典容错界被系统性击穿。</li>
+    </ul>
+
+    <h3>token 作为网络资源:拥塞控制类比的现状</h3>
+    <ul>
+      <li>Token Economics(arXiv 2605.09104)已提出 token=生产要素/交换媒介/记账单位,宏观层讨论<b>拥塞外部性与机制设计</b>——但停在经济学类比,AIMD/队列论未进拓扑设计。</li>
+      <li>DPI 论证(arXiv 2604.02460):等 token 预算下单 agent 常胜 MAS——token 预算是 MAS 比较的度量基准。</li>
+      <li>无意识撞车证据:Symphony 的 stall_timeout_ms + 指数退避 = TCP 重传;kill threshold = 断连——工程界已在用拥塞控制,没人形式化。<b>空白可占</b>。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>3️⃣ 假说 2:控制科学引入 <span class="tag">supervisory control / 可观可控 / 联锁</span></h2>
+
+    <table>
+      <tr><th>控制概念</th><th>一句人话</th><th>agent 场景映射</th><th>文献状态</th></tr>
+      <tr><td><b>可控性</b></td><td>能不能把它驱到想要的状态</td><td>prompt = 控制输入;magic word ≤10 token 对 97% 实例存在(ICLR 2024)但<mark>脆弱</mark>(GenCtrl)</td><td>已立论</td></tr>
+      <tr><td><b>可观性</b></td><td>能不能从输出看出内部状态</td><td>隐藏 system prompt 使用户不可观(arXiv 2405.14061);Watson 的 cognitive observability(2411.03455)</td><td>已立论</td></tr>
+      <tr><td><b>闭环稳定性</b></td><td>自反馈会不会退化</td><td>闭环自训练必然退化(Heat Death 2404.02325;Nature 2024 model collapse);治理层解释 97% 方差、无治理时"漂向吸引子"(2608.11207)</td><td>已立论</td></tr>
+      <tr><td><b>监督控制</b>(supervisory)</td><td>人设定目标、机器执行、人可否决</td><td>Proposition 5:监督层否决模式切换(2603.10779)——联锁雏形,但单 agent</td><td>雏形</td></tr>
+      <tr><td><b>ARC 分解</b></td><td>每 agent 守一个被控变量,MIN/MAX selector 解冲突</td><td>Nogueira & Skogestad(2606.30877)——最接近的先行者,但 agent 是控制器非对象、无人类</td><td>已占(部分)</td></tr>
+      <tr><td><b>安全联锁</b></td><td>硬件级硬门,不靠操作员记规矩</td><td>OCL 的 approve/revise/block/escalate(2606.04306);Agent-C 的 SMT 时序约束(2512.23738,如"先认证后访问")</td><td>工程形态有,无形式化</td></tr>
+      <tr><td><b>内模原理</b></td><td>控制器须内含扰动模型才能抗扰</td><td>人的心智模型须含 agent 失败模式(呼应信任校准研究:用户高估因为心智模型错)</td><td><mark>0 篇文献——空白</mark></td></tr>
+      <tr><td><b>Sheridan 分级</b>(1971)</td><td>10 级自动化谱系</td><td>agent 化版本多(2506.12469 五级/LLM-HAS A1-A5)但全是定性分级+界面层,与可观/可控无形式化接口</td><td>现代化中,接口空白</td></tr>
+    </table>
+
+    <blockquote class="insight">
+      <strong>💡 50 年的回响</strong>
+      Sheridan 的 levels of automation(1971)比我们的"自主度阶梯"早 50 年且更细;控制科学不是新发明,是<b>被 agent 时代遗忘的正确词汇表</b>。
+    </blockquote>
+  </div>
+
+  <div class="card">
+    <h2>4️⃣ 新增层:语义容错 <span class="tag red">agent 特有故障的理论化</span></h2>
+
+    <h3>三类语义故障(与经典故障的对照)</h3>
+    <table>
+      <tr><th>故障类型</th><th>经典对应</th><th>agent 版本</th><th>关键差异</th></tr>
+      <tr><td>幻觉相关性</td><td>拜占庭(随机)</td><td>同源模型共故障 60%(2506.07962);共享血统/训练分布/工具链的"相干无效背书"(EBFT)</td><td><b>错误相关而非独立</b>——经典 BFT 界失效</td></tr>
+      <tr><td>谄媚传播</td><td>无对应</td><td>peer 谄媚在 MAS 传播(SIGDIAL 2026);激活层定位到中间注意力,单个正确异议者降 yield 54-73pp(2605.12991)</td><td><b>可机制性干预的故障通道</b></td></tr>
+      <tr><td>上下文污染</td><td>消息损坏</td><td>全广播同步使幻觉率 +34%(2606.21666)——同步协议本身是故障源</td><td><b>正确的分布式原语是阈值门控同步</b></td></tr>
+    </table>
+
+    <h3>共识机制的应用与失效</h3>
+    <ul>
+      <li><b>Raft/Paxos 直接搬用结论是"不行"</b>:Aegean(2512.20184)证明经典共识假设确定性状态机,不适用随机推理 agent。</li>
+      <li><b>控制论包装有效</b>:Resilient Consensus(Anand & Pappas 2606.15024)——prompt agent 在理论安全区也会共识失败,套经典 MSR 滤波后恢复 ≈100%,宣言"控制理论作为 agentic AI 安全层"。</li>
+      <li><b>但共识与拓扑必须联合设计</b>:SAC 批评 CP-WBFT 自报置信度可被单对抗者伪造、拓扑 ad hoc 无保证。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>5️⃣ 既有研究地图 <span class="tag violet">谁占了哪个坑</span></h2>
+    <table>
+      <tr><th>先行者</th><th>贡献</th><th>差在哪(我们的空间)</th></tr>
+      <tr><td>Nogueira & Skogestad(2606.30877)</td><td>ARC 过程控制理论分解多 agent,确定性 selector 保安全</td><td>无人类监督者;无语义容错;对象是物理过程</td></tr>
+      <tr><td>Anand & Pappas(2606.15024)</td><td>控制理论=agentic 安全层,MSR 滤波修复共识</td><td>单值共识场景;无拓扑设计;无人类</td></tr>
+      <tr><td>EBFT(2607.16109,2026-07)</td><td>语义故障形式化(epistemic fault + 容错预算)</td><td>区块链语境;无拓扑;无人类;刚出现未被 MAS 消化</td></tr>
+      <tr><td>OCL(2606.04306)</td><td>执行边界治理(approve/revise/block/escalate)</td><td>无控制论形式化;无语义故障模型</td></tr>
+      <tr><td>ShieldAgent/Agent-C/RoboGuard</td><td>单 agent 安全联锁工程(规则电路/SMT 时序/LTL)</td><td>全部单 agent;无拓扑;无多 agent 语义故障</td></tr>
+      <tr><td>监督控制形式化(2603.10779)</td><td>五级 agency + 监督层否决(联锁雏形)+ 稳定性条件</td><td>单 agent;多 agent 耦合明确列为 future work</td></tr>
+    </table>
+    <blockquote>
+      <strong>一句话</strong>:六位先行者各占一角——控制分解、共识修复、语义形式化、执行门禁、联锁工程、监督否决——<b>互不连通,且没有一位把"人类监督者"放进闭环</b>。
+    </blockquote>
+  </div>
+
+  <div class="card">
+    <h2>🔬 细分方向弹药库 <span class="tag">12 方向 · 代表文献 · 三档适配</span></h2>
+    <p style="font-size:13px;color:var(--muted);margin:4px 0 10px;">档位:<b>🟢 可直接借用</b>(架构/定理原样迁移) · <b>🟡 需改造</b>(问题框架迁移,数学不适用) · <b>⚪ 仅供参考</b>。文献出处均经检索验证。</p>
+
+    <h3>🟢 可直接借用(8 项)</h3>
+    <table>
+      <tr><th>方向</th><th>代表文献</th><th>核心思想 → agent 拓扑映射</th></tr>
+      <tr><td><b>一致性理论</b></td><td>Olfati-Saber, Fax, Murray, Proc. IEEE 95(1), 2007</td><td>代数连通度=共识速度、连通性=达成一致的必要条件 → <b>拓扑设计直接母学科</b>(共识值语义化为信念/计划对齐);与 r-robustness 互补</td></tr>
+      <tr><td><b>事件触发控制</b></td><td>Heemels et al., CDC 2012 教程;Tabuada, IEEE TAC 52(9), 2007</td><td>偏差超阈值才动作;"无事件=稳定=无需干预" → <b>人类监督者调度器</b>(人不被轮询、被事件触发)+ self-triggered 预测性检查点</td></tr>
+      <tr><td><b>排队论</b></td><td>Little, Operations Research 9(3), 1961;Harchol-Balter, MIT Press 2013</td><td>L=λW 守恒律 + SRPT 调度 → agent 任务编排的吞吐-延迟核算、共享推理资源排队模型</td></tr>
+      <tr><td><b>FDD/FTC 故障检测与容错</b> ⭐</td><td>Hwang et al., IEEE TCST 18(3), 2010(综述);Isermann, Automatica 20(4), 1984</td><td>残差生成→统计检验→隔离→重构 → <b>语义残差检测幻觉 + 解析冗余(异构模型交叉验证)对冲同源相关故障</b> + 隔离后角色重构</td></tr>
+      <tr><td><b>CPS 安全</b> ⭐</td><td>Cardenas et al., ICDCS-W 2008;Pasqualetti et al., IEEE TAC 58(11), 2013</td><td>欺骗/DoS/重放攻击模型 <b>1:1 对应</b> prompt injection/上下文洪泛/旧上下文重放;监视器布置=拓扑设计(哪些拓扑使攻击不可检测);幸存性=优雅降级</td></tr>
+      <tr><td><b>协议分层/网络切片</b></td><td>Saltzer/Reed/Clark, ACM TOCS 1984;Foukas et al., IEEE Comm. Mag. 2017</td><td>端到端论证=<b>语义校验放端点与人类,编排中间层保持哑</b>(回答"语义检查放哪层");切片=按角色分区的天然故障域隔离</td></tr>
+      <tr><td><b>运行时验证(RV)</b> ⭐</td><td>Leucker &amp; Schallhart, JLAP 78(5), 2009</td><td>LTL 规范→自动合成监控器→运行时检查轨迹并干预 → agent 行为监控的现成形式化(规范→监控→干预闭环)</td></tr>
+      <tr><td><b>语义/任务导向通信</b> ⭐</td><td>Gündüz et al., IEEE JSAC 41(1), 2023</td><td>传意义不传比特、语义失真度量、目标导向压缩 → <b>"语义容错"的通信侧孪生</b>:agent 间传意图/抽象而非全上下文</td></tr>
+    </table>
+
+    <blockquote class="insight">
+      <strong>⭐ 语义容错四件套(建议成组使用)</strong>
+      FDD/FTC(检测-隔离-重构)+ CPS 安全(攻击模型+监视器布置)+ 语义通信(语义失真度量)+ RV(规范监控器)= <b>"检测→隔离→重构→通信降级"完整闭环</b>,恰好是"语义容错"新层的工程实现图谱。
+    </blockquote>
+
+    <h3>🟡 需改造(7 项)</h3>
+    <table>
+      <tr><th>方向</th><th>代表文献</th><th>核心思想 → 改造点</th></tr>
+      <tr><td><b>SCT 离散事件监督控制</b></td><td>Ramadge &amp; Wonham, SIAM JCO 25(1), 1987;综述 Proc. IEEE 77(1), 1989</td><td>合法语言约束+可控/不可控事件二分 → <b>"语义不可控事件"=LLM 无法被可靠禁止的行为</b>,"人=监督控制器"的形式化母语;改造:语言确定性假设失效</td></tr>
+      <tr><td><b>控制屏障函数(CBF)</b></td><td>Ames et al., IEEE TAC 62(8), 2017;ECC 2019 教程</td><td>安全=集合不变性,QP 最小干预修正 → guardrail 安全过滤器架构;改造:光滑动力学数学不适用</td></tr>
+      <tr><td><b>网络化控制(NCS)</b></td><td>Hespanha et al., Proc. IEEE 95(1), 2007</td><td>时延/丢包/量化下的闭环 → agent 通信信道(API 延迟/丢消息/上下文截断),信息新鲜度(AoI)概念;改造:稳定性判据不迁移</td></tr>
+      <tr><td><b>信息论控制</b></td><td>Nair et al., Proc. IEEE 95(1), 2007;Touchette &amp; Lloyd, Physica A 331, 2004<span style="color:var(--red)">*</span></td><td>最小数据率=不稳定模态熵率 → "维持 agent 群相干的最小上下文速率"直觉;改造:定量公式失效(与语义通信互补成改造路径)</td></tr>
+      <tr><td><b>混成系统</b></td><td>Branicky, IEEE TAC 43(4), 1998;Goebel et al., IEEE CSM 2009</td><td><b>两个各自稳定的系统交替切换可能不稳定</b>(多 Lyapunov/dwell time)→ 编排器模式震荡告诫+驻留时间约束;改造:连续动力学不适用</td></tr>
+      <tr><td><b>平均场博弈(MFG)</b></td><td>Lasry &amp; Lions, Jpn. J. Math. 2, 2007;Huang et al., CIS 6(3), 2006</td><td>大规模 agent 只对群体统计量响应(NCE)→ 用聚合信号代替全对全通信;改造:理性同质假设不满足</td></tr>
+      <tr><td><b>意见动力学</b></td><td>Hegselmann &amp; Krause, JASSS 5(3), 2002;DeGroot, JASA 69, 1974</td><td>有界置信度(只听相近观点者)→ 预测 agent 群共识/极化/碎片化相变,解释同源相关错误为何导致假共识;改造:观点=向量假设需语义化</td></tr>
+    </table>
+
+    <h3>⚪ 仅供参考 + 已评估不收</h3>
+    <table>
+      <tr><th>方向</th><th>文献/理由</th></tr>
+      <tr><td><b>GR(1) 反应式综合</b></td><td>Bloem et al., J. Logic Computation 22(6), 2012 —— 规范→控制器自动综合的愿景,但 LLM 执行器非确定性使正确性保证退化</td></tr>
+      <tr><td><b>模糊控制</b>(已评估不收)</td><td>技术本体已被 LLM 替代(语言规则→可控函数正是 LLM 的定义属性);原列三条思想残余(语言变量分级/T-S 分模式线性化/Type-2 不确定性的不确定)经查均已被本库更现代工具覆盖——分别对应<b>事件触发控制(阈值分级)</b>、<b>混成系统 dwell time(模式切换安全)</b>、<b>信息率+AoI(不确定性量化)</b>,故不单列</td></tr>
+    </table>
+
+    <p style="font-size:12px;color:var(--muted);"><span style="color:var(--red)">*</span> 勘误:Touchette &amp; Lloyd 出处为 Physica A 331:140-172(2004,含 PRL 84:1156, 2000 版),非 Automatica;"信息率约束"主线建议引用 Nair et al. 2007 综述为主。</p>
+  </div>
+
+  <div class="card">
+    <h2>7️⃣ 差异化贡献与下一步 <span class="tag amber">我们能 claim 什么</span></h2>
+    <ul>
+      <li><b>核心 claim</b>:把"人=supervisory controller(带形式化 LOA)、agent 群=受控对象、红线=安全联锁、语义故障=相关故障"整合为<b>单一闭环拓扑设计框架</b>——联合可控性/可观性分析。</li>
+      <li><b>可引用根基</b>:可控性(2305.18449/2405.14061/GenCtrl)、稳定性(2404.02325/Nature 2024)、r-robustness(经 2605.09076)、语义共故障(2506.07962/2607.16109)、LOA(2506.12469/2505.00753/2604.04918)、监督控制(2603.10779/2606.30877)。</li>
+      <li><b>空白点(检索确认)</b>:内模原理×LLM=0 篇;AIMD 未进拓扑;LOA 与可观/可控无接口;联合设计无人做。</li>
+      <li><b>近期可做</b>(不依赖理论成熟):三档阶梯用控制词汇落地(档 3 的红线=权限 deny/ask 已可做);把 Symphony 式退避形式化为 AIMD 案例研究。</li>
+      <li><b>风险对冲</b>:EBFT 团队或 Anand&Pappas 若向"人类在环"扩展会直接撞车——尽快发表立场文档占位。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>📚 主要来源</h2>
+    <ul style="font-size:13px;color:var(--muted);">
+      <li>可控性/可观性:What's the Magic Word(ICLR 2024)· GenCtrl · Taming AI Bots(2305.18449)· Observability(2405.14061)</li>
+      <li>稳定性:Heat Death(2404.02325)· Nature 2024 model collapse(Shumailov)· Dynamic Governance(2608.11207)</li>
+      <li>语义容错:Correlated Errors(2506.07962)· EBFT(2607.16109)· Sycophancy Propagation(SIGDIAL 2026)· Not Just RLHF(2605.12991)· Sync Protocols(2606.21666)</li>
+      <li>共识:Resilient Consensus(Anand & Pappas 2606.15024)· SAC(2605.09076)· CP-WBFT(AAAI 2026)· DecentLLMs(2507.14928)· Aegean(2512.20184)</li>
+      <li>拓扑:EMNLP 2025 传播框架(2505.23352)· ICML 2025 韧性 · AgentsNet(2507.08616)· GPTSwarm(ICML 2024)</li>
+      <li>控制×agent:Control-Theoretic Foundation(2603.10779)· ARC 多 agent(Nogueira & Skogestad 2606.30877)· OCL(2606.04306)</li>
+      <li>LOA/Sheridan:Tsamados/Floridi/Taddeo(AI & Ethics)· Levels of Autonomy(2506.12469)· LLM-HAS(2505.00753)· Oversight Strategies(2604.04918)</li>
+      <li>token 经济:Token Economics(2605.09104)· DPI 论证(2604.02460)· Noesis AIMD(2608.15919)</li>
+      <li>细分弹药库:Olfati-Saber 一致性(Proc IEEE 2007)· Little(OR 1961)· Hwang FTC(TCST 2010)· Pasqualetti CPS(TAC 2013)· Saltzer 端到端(TOCS 1984)· Leucker RV(JLAP 2009)· Gündüz 语义通信(JSAC 2023)· Ramadge-Wonham SCT(SIAM JCO 1987)· Ames CBF(TAC 2017)· Hespanha NCS(Proc IEEE 2007)· Nair 信息率(Proc IEEE 2007)· Branicky 混成(TAC 1998)· Lasry-Lions/Huang MFG · Hegselmann-Krause 意见动力学</li>
+    </ul>
+  </div>
+
+</section>
+
+</main>
+
+<footer>
+  拓扑即控制 · 研究方向提案 · 2026-08 · 基于两轮深度检索(arXiv 2023–2026.08 / ICML / EMNLP / AAAI / SIGDIAL)
+</footer>
+
+<script>
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const pages = document.querySelectorAll('section.tab-page');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      pages.forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      window.scrollTo({ top: 0 });
+    });
+  });
+</script>
+
+</body>
+</html>

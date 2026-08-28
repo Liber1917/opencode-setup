@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语言规范 × Token 效率 — 论文全景(下班友好版)</title>
+<style>
+  :root {
+    --bg:#faf9f7; --card:#fff; --ink:#2a2a28; --muted:#7a7772; --line:#e8e5e0;
+    --accent:#0f766e; --accent-soft:#f0fdfa;
+    --amber:#b45309; --amber-soft:#fffbeb;
+    --red:#b91c1c; --red-soft:#fef2f2;
+    --violet:#6d28d9; --violet-soft:#f5f3ff;
+    --radius:14px; --shadow:0 2px 6px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.75;font-size:16px;padding-bottom:80px}
+  header{background:linear-gradient(135deg,#134e4a,#0f766e 60%,#14b8a6);color:#fff;padding:44px 24px 32px;text-align:center}
+  header h1{font-size:24px;font-weight:700}
+  header p{margin-top:8px;opacity:.9;font-size:14px}
+  .badges{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .badges span{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:3px 14px;font-size:12.5px}
+  main{max-width:880px;margin:0 auto;padding:28px 20px 0}
+
+  .verdict{background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;border-radius:var(--radius);padding:26px 30px;margin:-48px auto 24px;box-shadow:var(--shadow);max-width:840px}
+  .verdict .line{font-size:16.5px;line-height:1.8;color:#fff}
+  .verdict .line b{color:#5eead4}
+  .verdict .sub{margin-top:10px;font-size:13.5px;color:#94a3b8}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 28px;margin:0 auto 22px;max-width:840px}
+  .card h2{font-size:19px;display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:14px;border-bottom:2px solid var(--accent-soft)}
+  .card h2 .num{background:var(--accent);color:#fff;font-size:13px;font-weight:700;width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .card h2 .tag{margin-left:auto;font-size:12px;font-weight:600;padding:2px 12px;border-radius:999px}
+  .tag.ok{background:#f0fdf4;color:#15803d}
+  .tag.warn{background:var(--amber-soft);color:var(--amber)}
+  .tag.bad{background:var(--red-soft);color:var(--red)}
+  .card h3{font-size:15.5px;margin:16px 0 6px}
+  .card p{margin:8px 0}
+  .card ul{margin:6px 0 6px 4px;list-style:none}
+  .card li{margin:7px 0;padding-left:26px;position:relative}
+  .card li::before{content:"";position:absolute;left:6px;top:11px;width:7px;height:7px;border-radius:50%;background:var(--accent);opacity:.6}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 13px;text-align:left;vertical-align:top}
+  th{background:#f6f5f2;font-weight:600;white-space:nowrap}
+  tr:nth-child(even) td{background:#fbfaf8}
+  mark{background:#fef9c3;padding:0 3px;border-radius:3px}
+  .takeaway{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 18px;border-radius:0 10px 10px 0;margin:14px 0;font-size:14.5px}
+  .takeaway b{color:var(--accent)}
+  .contra{border-left:4px solid var(--red);background:var(--red-soft);padding:12px 18px;border-radius:0 10px 10px 0;margin:14px 0;font-size:14.5px}
+  .num-big{font-size:22px;font-weight:800;color:var(--accent)}
+  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0}
+  .stat{flex:1;min-width:150px;background:#f6f5f2;border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:center}
+  .stat .v{font-size:24px;font-weight:800;color:var(--accent)}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .stat.bad .v{color:var(--red)}
+  .src{color:var(--muted);font-size:12.5px;font-style:normal}
+  footer{text-align:center;color:var(--muted);font-size:12.5px;padding:34px 20px 30px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗣️ 语言规范能省 Token 吗?</h1>
+  <p>「让 AI 思考和输出时遵循某种语言规范」的 20+ 篇论文全景 · 2023-2026</p>
+  <div class="badges">
+    <span>长度规范 ✓</span><span>格式规范 ⚠ 双刃剑</span><span>语言选择 ✗ 伪命题</span><span>信息密度度量 ✓ 新框架</span>
+  </div>
+</header>
+
+<main>
+
+<div class="verdict">
+  <div class="line">
+    ① 在 prompt 里直接写 <b>"思考不超过 N token"</b> → 实测省 <b>50–67%</b>,准确率只掉 <b>&lt;3%</b> ✅<br>
+    ② 规范<b>输入指令</b>(结构化/伪代码)涨分 <b>+8~40%</b>;规范<b>输出格式</b>(强制 JSON)伤推理 ❌——方向相反<br>
+    ③ 换语言(中↔英)省的 token 会被<b>更低的成功率</b>吞掉 → <b>模型选对 &gt;&gt; 语言选对</b>
+  </div>
+  <div class="sub">最有趣的发现:每道题存在一个「最小 token 阈值」(token complexity)——低于必错,高于浪费。所有压缩技巧最后落在同一条曲线上,起作用的是长度,不是措辞。</div>
+</div>
+
+<!-- ============ 1 ============ -->
+<div class="card">
+  <h2><span class="num">1</span>长度 / 预算规范 <span class="tag ok">最硬的实证</span></h2>
+
+  <div class="stat-row">
+    <div class="stat"><div class="v">-67%</div><div class="l">token(预算合理时)<br>258 → 86</div></div>
+    <div class="stat"><div class="v">&lt;3%</div><div class="l">准确率损失</div></div>
+    <div class="stat bad"><div class="v">+157</div><div class="l">预算给太小时反而超支<br>(Token Elasticity)</div></div>
+  </div>
+
+  <ul>
+    <li><b>TALE</b>(ACL 2025):在 prompt 写"预算 N token"真有效——但<b>预算要匹配难度</b>:给 10 token 的预算,模型实际跑 157 token(它做不到就摆烂)<span class="src">arXiv 2412.18547</span></li>
+    <li><b>Token Complexity</b>(2025):31 种压缩指令 × 6 模型,<b>全部落在同一条帕累托曲线</b>——"be concise"和"删掉标点"没有本质区别,长度才是唯一变量<span class="src">arXiv 2503.01141</span></li>
+    <li><b>BudgetThinker</b>(2025):训练时持续插入"剩余预算"提示——同预算准确率 <b>+4.9%</b>,预算遵循精度大增<span class="src">arXiv 2508.17196</span></li>
+    <li><b>Budget Guidance</b>(ACL 2026):免微调,轻量预测器软引导——紧预算下比基线 <b>+26%</b>,63% 的 token 干完整思考的活</li>
+  </ul>
+
+  <div class="takeaway"><b>落地</b>:给 agent 系统提示加显式 token 预算 = 免费的 50% 节省。但预算要<b>自适应难度</b>(宁松勿紧),固定预算两头受损。</div>
+</div>
+
+<!-- ============ 2 ============ -->
+<div class="card">
+  <h2><span class="num">2</span>格式规范 <span class="tag warn">双刃剑,方向决定一切</span></h2>
+
+  <table>
+    <tr><th>做法</th><th>效果</th><th>证据</th></tr>
+    <tr><td><b>约束输出格式</b><br>(强制 JSON 解码)</td><td style="color:var(--red)"><b>伤推理</b>:推理任务掉分严重;模型把 answer 键写到 reason 前面,变成直接作答</td><td>Let Me Speak Freely?<br>EMNLP 2024</td></tr>
+    <tr><td>同上,但分类任务</td><td style="color:var(--accent)"><b>反而涨分</b>(约束答案空间减少选择错)</td><td>同上</td></tr>
+    <tr><td><b>约束输入指令</b><br>(伪代码/结构化步骤)</td><td style="color:var(--accent)"><b>+8%(GSM)/ +40%(GSM-hard)</b>;BIG-Bench Hard 超 CoT 12 点;agent 用代码作 action space 比 JSON 工具调用<b>成功率高 20%</b>(跨 17 模型)</td><td>PAL / Chain of Code / CodeAct</td></tr>
+    <tr><td>结构化生成(做对了的)</td><td style="color:var(--accent)">prompt 里展示结构 + 正确解码 → structured <b>0.77 反超</b> unstructured 0.68——原论文的"伤害"是实现错误</td><td>outlines 团队反驳</td></tr>
+  </table>
+
+  <div class="takeaway"><b>关键区分</b>:规范"怎么下指令"(给 AI 的输入结构化)= 正收益;规范"AI 怎么想怎么答"(强制输出格式)= 负收益(除非任务本身是分类/抽取)。</div>
+
+  <div class="contra"><b>对咱们的启示</b>:ai-communication skill 约束的是"呈现结构"而非"推理格式"——模型先自由思考再组织输出,属于安全区。但要警惕它对推理密集任务的隐性税。</div>
+</div>
+
+<!-- ============ 3 ============ -->
+<div class="card">
+  <h2><span class="num">3</span>语言选择(中 vs 英) <span class="tag bad">基本是伪命题</span></h2>
+
+  <div class="stat-row">
+    <div class="stat"><div class="v">0.98x~1.28x</div><div class="l">中文 token 成本随模型翻转<br>GLM 更省 / MiniMax 更贵</div></div>
+    <div class="stat bad"><div class="v">-4.5~9.9pp</div><div class="l">中文 prompt 成功率全线更低</div></div>
+    <div class="stat"><div class="v">30pp</div><div class="l">模型间成功率差<br>≫ 任何语言效应</div></div>
+  </div>
+
+  <ul>
+    <li><b>"中文 vibe coding 省 40%"是谣言</b>(arXiv 2604.14210,SWE-bench 实测):期望成本 = token ÷ 成功率——中文省的那点 token 被成功率损失<b>全部吞掉还倒贴</b></li>
+    <li><b>字符密度 ≠ token 效率</b>:中文只用 37% 的字符,却花 1.34x(OpenAI o200k)~ 2.08x(cl100k)的 token——汉字基本一字一 token,英文词被合并</li>
+    <li><b>国产模型上中文≈持平甚至更省</b>(GLM 0.98x / Kimi / DeepSeek);Claude 系 tokenizer 在<b>所有语言都最贵</b>(1.2-2.3x)</li>
+    <li>tokenizer 决定一切,语言本身没有内在效率——换 tokenizer(generation 升级)比换语言变化更大(o200k 砍掉 40% CJK 惩罚)</li>
+  </ul>
+
+  <div class="takeaway"><b>落地</b>:优先级 = <b>模型选择 &gt;&gt; prompt 质量 &gt;&gt; 语言选择</b>。系统提示这类高复用文本,在 GLM 上用中文反而便宜——值得用自己环境实测一次。</div>
+</div>
+
+<!-- ============ 4 ============ -->
+<div class="card">
+  <h2><span class="num">4</span>信息密度的正式度量 <span class="tag ok">2025-2026 信息论框架成型</span></h2>
+
+  <table>
+    <tr><th>框架</th><th>度量什么</th><th>结果</th></tr>
+    <tr><td><b>Think or Not?</b><br>NeurIPS 2025</td><td>InfoGain(每步熵减)+ InfoBias(语义偏差):长推理链信息增益递减,错误答案偏差更高</td><td>熵驱动"置信够了就停":<b>-50.8% token,准确率反升 1.1%</b></td></tr>
+    <tr><td><b>InfoDensity</b><br>2026</td><td>好推理 = 低不确定性收敛 + 单调进展;按此做 RL 奖励</td><td>同准确率大幅减 token,<b>抗 reward hacking</b></td></tr>
+    <tr><td><b>CIB:推理即压缩</b><br>2026</td><td>每 token 按<b>语义 surprisal</b> 计税——高信息 token 便宜,可预测的填充昂贵</td><td><b>-48% token / -1.5% 准确率</b>,帕累托前沿可导航</td></tr>
+    <tr><td><b>Content Not Length</b><br>2026</td><td>控制变量铁证:同内容下纯加长,对 25 个独立训练模型<b>几乎零贡献</b></td><td>CoT 的价值在<b>内容密度</b>,长度只是载体;有效的是"验证/检查内容"</td></tr>
+  </table>
+
+  <div class="takeaway"><b>落地</b>:"每 token 信息量"已有可计算指标(熵减/surprisal)。给 skill 写"每个中间步骤必须引入新信息,禁止复述已知/铺垫过渡"——这类<b>信息密度规范</b>有理论依据(但作为训练目标效果最好,prompt 级表述衰减快)。</div>
+</div>
+
+<!-- ============ 4.5 ============ -->
+<div class="card">
+  <h2><span class="num">4.5</span>好 token 的标准 &amp; 量化全家福 <span class="tag ok">2026-08-24 补</span></h2>
+
+  <div class="takeaway" style="margin-top:4px"><b>一句话标准</b>:好 token = 让模型对答案的<b>不确定性下降</b>的 token;坏 token = 可预测的填充(删掉它你对答案的猜测不变);<b>最坏</b>的 = 看似推进实则熵反弹(想歪的起点)。检验法:每写一句问"删掉这句,我对答案的把握变吗?不会变就删"。</div>
+
+  <table>
+    <tr><th>指标</th><th>量什么</th><th>出处/实践</th></tr>
+    <tr><td><b>Surprisal</b></td><td>单 token 信息量(−log P):越意外越有信息</td><td>CIB 用它做训练税;logprob 即得 ✅</td></tr>
+    <tr><td><b>Semantic Entropy</b></td><td>在<b>意义空间</b>算熵:采样→双向蕴含聚类→簇概率的熵——意义熵高=模型不知道自己要说什么</td><td><b>Farquhar, Nature 2024</b>;开源 jlko/semantic_uncertainty(411★);有<b>不需 logprob 的离散变体</b> ✅</td></tr>
+    <tr><td><b>SEP 探针</b></td><td>单次生成的隐状态直接预测语义熵,近零开销</td><td>OATML 开源 ✅(需隐状态)</td></tr>
+    <tr><td><b>EPVI</b></td><td>CoT 相对输入引入的"模型可用新信息"——<b>黑盒可算</b></td><td>LREC-COLING 2024 ✅</td></tr>
+    <tr><td><b>UID 均匀性</b></td><td>好推理的步级信息密度<b>局部均匀无尖峰</b>;错误链有熵尖刺</td><td>arXiv 2510.06953:UID 选 trace,AIME 相对 +10~32% ✅</td></tr>
+    <tr><td><b>EPR/WEPR</b></td><td>只用 API 给的 <b>top-K logprob(K≤10 够)</b> 算 token 级风险分,可逐 token 实时显示</td><td>arXiv 2509.04492 ✅ <b>API 场景最佳</b></td></tr>
+  </table>
+
+  <h3>🖥️ "思考质量仪表"已有人做了</h3>
+  <ul>
+    <li><b>ATLAS-RTC</b>(2026):token 级运行时控制器——每步看熵/漂移,分级干预(偏置→降温→掩码→回滚重导)</li>
+    <li><b>Klarity</b>(开源):熵+推理步质量+语义聚类,幻觉检测基准 80%+,支持 vLLM</li>
+    <li><b>TokenScope / prompt-observatory</b>:实时 token 流+困惑度热图+幻觉评分面板</li>
+  </ul>
+
+  <div class="contra"><b>诚实边界</b>:①<b>高置信胡编</b>是所有熵方法的死穴(低熵地错);②surprisal 奖励"新"不奖励"有用"——无关新信息也被奖励;③纯长度奖励会被 hack(InfoDensity 论文自证)。</div>
+
+  <div class="takeaway"><b>两个落地件判定</b>:①dense-output skill ✅ 可行(信息密度规范有 UID 证据背书);②<b>审计日志的 token 利用率指标 ✅ 且有现成路径</b>:API top-K logprob → WEPR 式分数 → 会话聚合 = 零语义分析的 token 利用率。写进 E 方向审计模块实现选项。</div>
+</div>
+
+<!-- ============ 5 ============ -->
+<div class="card">
+  <h2><span class="num">5</span>可落地的 Skill 设计 <span class="tag ok">"dense-output" 候选</span></h2>
+
+  <h3>✅ 该写进 skill 的(有数据支撑)</h3>
+  <ul>
+    <li><b>显式 token 预算</b>(TALE 式):"回答此问题不超过 N token"——预算自适应,宁松勿紧</li>
+    <li><b>内容密度规范</b>(CIB 式):"每个中间步骤必须引入新信息(减少不确定性);禁止:复述任务、总结已知、铺垫过渡"</li>
+    <li><b>指令结构化</b>(对 skill 作者):步骤指令用伪代码/结构化写,不写流水账散文(+8~40%)</li>
+  </ul>
+
+  <h3>❌ 明确不做的(实证为负)</h3>
+  <ul>
+    <li>强制输出 JSON 格式(伤推理)</li>
+    <li>切换思考语言(收益被成功率吞掉)</li>
+    <li>无预算的 "be concise"(落在帕累托曲线上,不如显式预算)</li>
+  </ul>
+
+  <h3>❓ 未决(值得自己测)</h3>
+  <p style="font-size:14.5px">"中文用户 + GLM"组合下,系统提示/AGENTS.md 用中文是否系统性更省?数据暗示 ≈ 持平但任务相关——一条脚本就能实测。</p>
+</div>
+
+</main>
+
+<footer>
+  语言规范 × Token 效率 · 2026-08 · 20+ 篇论文(ACL/EMNLP/NeurIPS/arXiv 2023-2026)<br>
+  Markdown 原版:/home/language-spec-token-efficiency.md
+</footer>
+
+</body>
+</html>
