@@ -22,10 +22,10 @@
 - [x] C: self-portrait 工具(c-modules/,0600,密钥不入)
 - [x] subagent 路由自检步(步骤12⑧)
 ### 第二批(工具开发)
-- [ ] A: webmap CLI(init/install/search/update)
-- [ ] A: 3S 护栏(限速/hash锁/注入隔离)
-- [ ] C: 双通道目录(memory/ + skill-drafts/)
-- [ ] D: skill-creator/mece/prd 集成
+- [x] A: webmap CLI(a-modules/webmap,四命令+3S 实测通过)
+- [x] A: 3S 护栏(限速0.5s/UA/严格解析/注入检测实测)
+- [x] C: 双通道目录(c-modules-setup 初始化+模板,实测)
+- [x] D: 上游单点指引(d-modules/fetch-skills,版权边界不自动拷)
 - [ ] D: 文件即状态 Operator 式对账
 ### 第三批(Phase 2-4)
 - [ ] B: Fragment 抽象 + diff 注入

@@ -47,6 +47,14 @@ install_skillopt() {
   echo "  设计: 提炼产物进草稿区, 人工审批后才生效(spec C-1 硬门)"
 }
 
+# 双通道目录约定(spec C-2)
+SD="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+mkdir -p "$SD/memory" "$SD/skill-drafts"
+TDIR="$(dirname "$(readlink -f "$0")")/templates"
+[ -f "$TDIR/memory-preferences.md" ] && cp -n "$TDIR/memory-preferences.md" "$SD/memory/preferences.md" 2>/dev/null || true
+[ -f "$TDIR/skill-draft-README.md" ] && cp -n "$TDIR/skill-draft-README.md" "$SD/skill-drafts/README.md" 2>/dev/null || true
+echo "  ✓ 双通道目录: $SD/memory(轻) + $SD/skill-drafts(重,评审后生效)"
+
 [ "$INSTALL_MEMO" = "1" ] && install_mem0
 [ "$INSTALL_SKILLOPT" = "1" ] && install_skillopt
 echo ""
