@@ -125,7 +125,7 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   "\$schema": "https://opencode.ai/config.json",
   "plugin": [
     "oh-my-openagent@latest",
-    "superpowers@git+https://github.com/obra/superpowers.git"
+    "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git"
   ],
   "permission": {
     "read": {
@@ -876,7 +876,7 @@ echo "  4. 运行 OpenCode:"
 echo "     opencode"
 echo ""
 echo "  5. 查看已安装的 skills:"
-echo '     skill({name: "superpowers/brainstorming"})'
+echo '     skill({name: "superpowers/brainstorming"})  // 中文版(zh)'
 echo ""
 echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"

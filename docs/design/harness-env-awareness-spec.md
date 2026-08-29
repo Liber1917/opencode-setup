@@ -243,6 +243,9 @@ webmap(自研, MIT 干净, 仿 llmstxt-cli 命令形态):
 - 边界与双通道定稿;待做:见 C-5 实施意见(用轮子版)
 - 未决:改进通道的"更优流程"如何被可靠监测(需规则/检索配合,后续细化)
 
+### 生态替换记录(2026-08-28)
+- **superpowers → superpowers-zh(jnMetaCode,7.9k★)**:benchmark 实测 zh 50/54 vs en 45/54(中文触发 2/0、debug 流程更严、翻译无损);setup 默认插件源已换 jnMetaCode/superpowers-zh;注意 zh 基于上游旧快照(brainstorming/executing-plans/subagent-driven-development 落后一次重写);英文环境用户可手动换回 obra/superpowers。报告: benchmarks/superpowers-zh-vs-en/
+
 ### C-5 实施意见(2026-08-24 定稿:集成而非自研)
 **核心原则:不造轮子,优先集成成熟开源。**
 
