@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# opencode-setup · D-Ⅲ 文件即状态(Operator 式对账循环)
+# 依据: specs/D-control.md D-3 轻场景(≤5 agent/无预算/单人): 声明式状态文件 + watch-diff-reconcile
+# 设计(k8s Operator 模式的轻量实现):
+#   STATE.md = 声明式任务状态(frontmatter: status/owner/depends)
+#   对账循环 = 读声明 → diff 实际 → 修正漂移(重置孤儿任务/标记卡死)
+#   轻量实现 = CLI 工具(非常驻),cron/手动/agent 触发均可
+set -euo pipefail
+STATE_FILE="${OPSTATE_FILE:-./STATE.md}"
+
+usage() { echo "用法: opstate [init|status|reconcile|claim <id> <owner>|done <id>]"; exit 0; }
+
+cmd_init() {
+  [ -f "$STATE_FILE" ] && { echo "✓ 已存在 $STATE_FILE"; exit 0; }
+  cat > "$STATE_FILE" << 'EOF'
+# 任务状态(声明式,Operator 对账)
+# 格式: ## <id> | status: pending|active|blocked|done | owner: <名> | depends: <id,...>
+# 对账: opstate reconcile 检测漂移(孤儿/死依赖/僵尸 active)
+EOF
+  echo "✓ 初始化 $STATE_FILE"
+}
+
+parse_tasks() {  # 输出: id|status|owner|depends
+  rtk grep -E "^## " "$STATE_FILE" 2>/dev/null | awk -F' *[|] *' '{
+    gsub(/^## /,"",$1); gsub(/^status: /,"",$2); gsub(/^owner: /,"",$3); gsub(/^depends: /,"",$4);
+    print $1"|"$2"|"$3"|"$4
+  }' || true
+}
+
+cmd_status() {
+  echo "══ 任务状态($STATE_FILE)══"
+  parse_tasks | while IFS='|' read -r id st own dep; do
+    [ -z "$id" ] && continue
+    case "$st" in done) icon=✓;; active) icon=▶;; blocked) icon=⛔;; *) icon=○;; esac
+    echo "  $icon $id [$st] owner:$own dep:$dep"
+  done
+  echo "总计: $(parse_tasks | wc -l)"
+}
+
+cmd_reconcile() {
+  command -v python3 >/dev/null && { python3 - "$STATE_FILE" << 'PYR'
+import sys,re
+f=sys.argv[1]; s=open(f).read(); drift=0
+lines=s.split("\n")
+done=set()
+for l in lines:
+    m=re.match(r"## (\S+) \| status: done",l)
+    if m: done.add(m.group(1))
+out=[]
+for l in lines:
+    m=re.match(r"## (\S+) \| status: (\w+) \| owner: ?(\S*) \| depends: ?(\S*)",l)
+    if m:
+        tid,st,own,dep=m.groups()
+        if st=="active":
+            if not own:
+                l=re.sub(r"status: active","status: pending",l)
+                print(f"⚖ 漂移: {tid} active 无 owner → pending"); drift+=1
+            elif dep and dep!="-":
+                for d in dep.split(","):
+                    if d and d not in done:
+                        l=re.sub(r"status: active","status: blocked",l)
+                        print(f"⚖ 漂移: {tid} 依赖 {d} 未完成 → blocked"); drift+=1; break
+    out.append(l)
+open(f,"w").write("\n".join(out))
+print("✓ 无漂移(全部一致)" if drift==0 else f"共修正 {drift} 处漂移")
+PYR
+return; }
+  DRIFT=0
+  DONE_IDS=$(parse_tasks | while IFS='|' read -r id st _ _; do [ "$st" = "done" ] && echo "$id"; done)
+  # 检测1: active 无 owner → 重置 pending(孤儿任务)
+  while IFS='|' read -r id st own _; do
+    [ "$st" = "active" ] && [ -z "$own" -o "$own" = " " ] && {
+      sed -i.bak "s/^## $id | status: active/## $id | status: pending/" "$STATE_FILE"
+      echo "⚖ 漂移: $id active 无 owner → 重置 pending"; DRIFT=$((DRIFT+1)); }
+  done < <(parse_tasks)
+  # 检测2: 依赖未 done 但自身 active → 标记 blocked(死依赖)
+  while IFS='|' read -r id st own dep; do
+    [ "$st" = "active" ] && [ -n "$dep" ] && [ "$dep" != " " ] && {
+      for d in $(echo "$dep" | tr ',' ' '); do
+        echo "$DONE_IDS" | rtk grep -qx "$d" || {
+          sed -i.bak "s/^## $id | status: active/## $id | status: blocked/" "$STATE_FILE"
+          echo "⚖ 漂移: $id 依赖 $d 未完成 → blocked"; DRIFT=$((DRIFT+1)); break; }
+      done; }
+  done < <(parse_tasks)
+  rm -f "$STATE_FILE.bak"
+  [ "$DRIFT" = 0 ] && echo "✓ 无漂移(全部一致)"
+}
+
+cmd_claim() { sed -i.bak "s/^## $1 | status: pending/## $1 | status: active | owner: $2/; s/^## $1 | status: pending | owner: /## $1 | status: active | owner: $2 | /" "$STATE_FILE" && rm -f "$STATE_FILE.bak" && echo "✓ $1 → active(owner:$2)"; }
+cmd_done()  { sed -i.bak "s/^## $1 | status: active/## $1 | status: done/" "$STATE_FILE" && rm -f "$STATE_FILE.bak" && echo "✓ $1 → done"; }
+
+case "${1:-help}" in
+  init) cmd_init;;
+  status) cmd_status;;
+  reconcile) cmd_reconcile;;
+  claim) shift; cmd_claim "${1:?id}" "${2:?owner}";;
+  done) shift; cmd_done "${1:?id}";;
+  *) usage;;
+esac
