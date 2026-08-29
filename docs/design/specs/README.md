@@ -26,7 +26,7 @@
 - [x] A: 3S 护栏(限速0.5s/UA/严格解析/注入检测实测)
 - [x] C: 双通道目录(c-modules-setup 初始化+模板,实测)
 - [x] D: 上游单点指引(d-modules/fetch-skills,版权边界不自动拷)
-- [ ] D: 文件即状态 Operator 式对账
+- [ ] D: 文件即状态 Operator 式对账(**待立项**:需常驻组件,非脚本层)
 ### 第三批(Phase 2-4)
-- [ ] B: Fragment 抽象 + diff 注入
-- [ ] B: 异步状态机 + env status
+- [ ] B: Fragment 抽象 + diff 注入(**待立项**:需 opencode 插件 API/TS 开发)
+- [ ] B: 异步状态机 + env status(**待立项**:同上)
