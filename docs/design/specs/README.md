@@ -16,11 +16,11 @@
 ## 实施任务清单(按优先级)
 
 ### 第一批(补核心闭环)
-- [ ] B: env-profile 探测脚本(Phase1 静态核心)
-- [ ] D: preset-skills 部署步(29 skill 拷贝)
-- [ ] E: audit hook 自动接线(写 opencode.json event 段)
-- [ ] C: self-portrait 工具(复用 B 架构)
-- [ ] subagent 路由自检步
+- [x] B: env-profile 探测脚本(b-modules/,实测通过)
+- [x] D: preset-skills 部署步(步骤12⑦,幂等跳过已存在)
+- [x] E: audit hook 自动接线(实测 event 四通道写入)
+- [x] C: self-portrait 工具(c-modules/,0600,密钥不入)
+- [x] subagent 路由自检步(步骤12⑧)
 ### 第二批(工具开发)
 - [ ] A: webmap CLI(init/install/search/update)
 - [ ] A: 3S 护栏(限速/hash锁/注入隔离)
