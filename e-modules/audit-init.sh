@@ -16,22 +16,29 @@ CIRCUIT_THRESHOLD=5           # 熔断: 单会话连续 deny ≥5 次 → 告警
 
 init() {
   mkdir -p "$AUDIT_DIR"
-  cat << EOF
-
-# ── E-Ⅱ 审计模块:把以下片段合并进 opencode 配置(event hooks 可用时)──
-# 位置: ~/.config/opencode/opencode.json 的 "event" 字段
-{
-  "event": {
-    "permission.ask":    [{ "type": "command", "command": "$AUDIT_DIR/hook.sh ask" }],
-    "permission.deny":   [{ "type": "command", "command": "$AUDIT_DIR/hook.sh deny" }],
-    "permission.allow":  [{ "type": "command", "command": "$AUDIT_DIR/hook.sh allow" }],
-    "permission.reject": [{ "type": "command", "command": "$AUDIT_DIR/hook.sh reject" }]
-  }
+  # 自动接线: 写入 opencode.json event 段(python3 可用时)
+  CFG="$HOME/.config/opencode/opencode.json"
+  if command -v python3 >/dev/null 2>&1 && [ -f "$CFG" ]; then
+    python3 - "$CFG" "$AUDIT_DIR" << 'PYEOF'
+import json,sys
+cfg_path, audit_dir = sys.argv[1], sys.argv[2]
+try:
+    c = json.load(open(cfg_path))
+except Exception:
+    c = {"$schema": "https://opencode.ai/config.json"}
+c["event"] = {
+    "permission.ask":    [{"type":"command","command":f"{audit_dir}/hook.sh ask"}],
+    "permission.deny":   [{"type":"command","command":f"{audit_dir}/hook.sh deny"}],
+    "permission.allow":  [{"type":"command","command":f"{audit_dir}/hook.sh allow"}],
+    "permission.reject": [{"type":"command","command":f"{audit_dir}/hook.sh reject"}],
 }
-# 说明:
-#   - 来源天然区分: ask=弹窗给人 / deny=规则拒 / allow=规则放行(含白名单) / reject=人拒绝
-#   - hook 不可用的降级: bash 包装器方案见 audit 兜底注释
-EOF
+json.dump(c, open(cfg_path,"w"), ensure_ascii=False, indent=1)
+print("HOOK-WIRED")
+PYEOF
+    echo "  ✓ 审计 hook 已自动写入 opencode.json event 段(ask/deny/allow/reject 四通道)" >&2
+  else
+    echo "  ⚠ 无 python3,手动合并 event 段(ask/deny/allow/reject → $AUDIT_DIR/hook.sh)" >&2
+  fi
 
   cat > "$AUDIT_DIR/hook.sh" << 'HOOK'
 #!/usr/bin/env bash

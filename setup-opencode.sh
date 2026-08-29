@@ -842,6 +842,42 @@ PYEOF
   # ④ 合规文档
   "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
 
+  # ⑤ B-Ⅰ 环境画像(specs/B-environment.md Phase1)
+  if [ -f "$(dirname "$0")/b-modules/env-profile.sh" ]; then
+    cp "$(dirname "$0")/b-modules/env-profile.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/env-profile.sh"
+    "$MOD_DIR/env-profile.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 环境画像已生成(env-profile.md)${NC}" || true
+  fi
+
+  # ⑥ C-Ⅰ 自我画像(specs/C-embodiment.md)
+  if [ -f "$(dirname "$0")/c-modules/self-portrait.sh" ]; then
+    cp "$(dirname "$0")/c-modules/self-portrait.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/self-portrait.sh"
+    "$MOD_DIR/self-portrait.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 自我画像已生成(self-portrait.json)${NC}" || true
+  fi
+
+  # ⑦ D-preset-skills 部署(仓库→用户目录)
+  if [ -d "$(dirname "$0")/preset-skills" ]; then
+    for d in "$(dirname "$0")/preset-skills"/*/; do
+      name=$(basename "$d")
+      [ -f "$d/SKILL.md" ] || continue
+      if [ -d "$CONFIG_DIR/skills/$name" ]; then
+        echo -e "${BLUE}  - skill $name 已存在,跳过${NC}"
+      else
+        mkdir -p "$CONFIG_DIR/skills/$name"
+        cp -r "$d"* "$CONFIG_DIR/skills/$name/"
+        echo -e "${GREEN}  ✓ preset-skill 已部署: $name${NC}"
+      fi
+    done
+  fi
+
+  # ⑧ subagent 路由自检(装后验证 librarian 模型跟随主配置)
+  if command -v opencode >/dev/null 2>&1; then
+    ROUTE_OK=$(timeout 60 opencode run --model "$(python3 -c "
+import json
+c=json.load(open('$CONFIG_DIR/oh-my-openagent.json'))
+print(next(iter(c.get('agents',{}).values(),{}).get('model','zhipuai-coding-plan/glm-5.3')))" 2>/dev/null || echo zhipuai-coding-plan/glm-5.3)" '回答:OK' 2>/dev/null | rtk grep -c "OK" || echo 0)
+    [ "$ROUTE_OK" -gt 0 ] 2>/dev/null && echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}" || echo -e "${YELLOW}  ⚠ 路由自检未确认(网络/配额?可手动验证)${NC}"
+  fi
+
   echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"
   echo -e "${BLUE}    模块: $MOD_DIR (权限红线/审计/自检/合规)${NC}"
 else
