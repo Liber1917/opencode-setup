@@ -9,9 +9,15 @@
 
 set -euo pipefail
 HEADLESS=0
-for a in "$@"; do [ "$a" = "--headless" ] && HEADLESS=1; done
-OUT="${@: -1}"
-[ "$OUT" = "--headless" ] && OUT=/dev/stdout
+OUT=""
+for a in "$@"; do
+  case "$a" in
+    --headless) HEADLESS=1 ;;
+    -h|--help) echo "用法: gen-permissions.sh [--headless] [输出路径]"; exit 0 ;;
+    *) OUT="$a" ;;
+  esac
+done
+[ -z "$OUT" ] && OUT=/dev/stdout
 
 if [ "$HEADLESS" = "1" ]; then
 cat > "$OUT" << 'EOF'

@@ -48,14 +48,17 @@ EOF
 
 cmd_search() {
   [ -f "$REG" ] || { echo "先运行 webmap init"; exit 1; }
-  rtk grep -i "$1" "$REG" | head -10 || echo "无匹配"
+  grep -i "$1" "$REG" | head -10 || echo "无匹配"
 }
 
 cmd_install() {
-  local domain="$1" name="${2:-$(echo "$1" | sed 's/\./-/g; s/[^a-z0-9-]//g')}"
+  local domain="$1"
+  local name
+  name=$(printf '%s' "${2:-$1}" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9.-]/-/g; s/^\.\.*//; s/\.\.*$//; s/[.]/-/g' | cut -c1-50)
+  [ -n "$name" ] || { echo "✗ 无效名称"; return 1; }
   [ -f "$REG" ] || cmd_init
   local trusted=no
-  rtk grep -q "$domain" "$REG" && trusted=yes
+  grep -qF "$domain|" "$REG" 2>/dev/null && trusted=yes
 
   echo "→ 探测 https://$domain/llms.txt"
   local content; content=$(fetch "https://$domain/llms.txt")

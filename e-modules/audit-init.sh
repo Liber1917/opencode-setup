@@ -1,93 +1,72 @@
 #!/usr/bin/env bash
-# opencode-setup · E-Ⅱ 审计模块 (observe-only, logira 式)
-# 设计依据: spec E-2 — JSONL 追加 <1ms/调用; 审批来源必记; 轮转+30天; 熔断器
-# 依赖: opencode event hooks (实验特性; 不可用时降级为 session 日志定期归档)
-# 用法:
-#   audit-init.sh              → 安装 hook 配置片段 + 创建日志目录
-#   audit-init.sh --rotate     → 立即轮转(可挂 cron)
-
+# opencode-setup · E-Ⅱ 审计模块 v2 (observe-only)
+# 修复: A-1(JSONL python json.dumps 组装) + A-2(真连续 deny 熔断) + A-3(接线原子写)
 set -euo pipefail
-AUDIT_DIR="${OPENCODE_AUDIT_DIR:-$(dirname "$(readlink -f "$0")")}"
+AUDIT_DIR="${OPENCODE_AUDIT_DIR:-$HOME/.local/share/opencode-audit}"
 LOG="$AUDIT_DIR/audit.jsonl"
-MAX_BYTES=$((10*1024*1024))   # 单文件 10MB
-KEEP=3                        # 保留 3 个轮转文件 (~30MB)
-MAX_AGE_DAYS=30
-CIRCUIT_THRESHOLD=5           # 熔断: 单会话连续 deny ≥5 次 → 告警文件
+MAX_BYTES=$((10*1024*1024)); KEEP=3; MAX_AGE_DAYS=30
 
 init() {
   mkdir -p "$AUDIT_DIR"
-  # 自动接线: 写入 opencode.json event 段(python3 可用时)
-  CFG="$HOME/.config/opencode/opencode.json"
-  if command -v python3 >/dev/null 2>&1 && [ -f "$CFG" ]; then
-    python3 - "$CFG" "$AUDIT_DIR" << 'PYEOF'
-import json,sys
-cfg_path, audit_dir = sys.argv[1], sys.argv[2]
-try:
-    c = json.load(open(cfg_path))
-except Exception:
-    c = {"$schema": "https://opencode.ai/config.json"}
-c["event"] = {
-    "permission.ask":    [{"type":"command","command":f"{audit_dir}/hook.sh ask"}],
-    "permission.deny":   [{"type":"command","command":f"{audit_dir}/hook.sh deny"}],
-    "permission.allow":  [{"type":"command","command":f"{audit_dir}/hook.sh allow"}],
-    "permission.reject": [{"type":"command","command":f"{audit_dir}/hook.sh reject"}],
-}
-json.dump(c, open(cfg_path,"w"), ensure_ascii=False, indent=1)
-print("HOOK-WIRED")
-PYEOF
-    echo "  ✓ 审计 hook 已自动写入 opencode.json event 段(ask/deny/allow/reject 四通道)" >&2
-  else
-    echo "  ⚠ 无 python3,手动合并 event 段(ask/deny/allow/reject → $AUDIT_DIR/hook.sh)" >&2
-  fi
-
   cat > "$AUDIT_DIR/hook.sh" << 'HOOK'
 #!/usr/bin/env bash
-# 审计 hook: stdin 收 event JSON, 追加一行 JSONL (observe-only, 永不阻断)
 set -euo pipefail
 DIR="${OPENCODE_AUDIT_DIR:-$(dirname "$(readlink -f "$0")")}"
 LOG="$DIR/audit.jsonl"
-TYPE="$1"   # ask|deny|allow|reject
-TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TYPE="$1"; TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INPUT=$(cat 2>/dev/null || echo '{}')
-# 提取关键载荷(容错:字段缺失记 null)
-SESSION=$(echo "$INPUT" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("sessionID","null"))' 2>/dev/null || echo null)
-TOOL=$(echo "$INPUT" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("tool","null"))' 2>/dev/null || echo null)
-# 脱敏: 命令串里的长 token/类 key 模式打码 (入库前脱敏, fail-safe: python 挂了就整体截断)
-CMD=$(echo "$INPUT" | python3 -c '
+python3 - "$TYPE" "$TS" "$INPUT" >> "$LOG" << 'PYAUDIT' 2>/dev/null || echo '{"parse":"fail"}' >> "$LOG"
 import json,sys,re
-d=json.load(sys.stdin)
-c=str(d.get("command") or d.get("input") or "")
-c=re.sub(r"(sk-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]+", r"\1***", c)
-c=re.sub(r"(Bearer\s+[A-Za-z0-9_.-]{8})[A-Za-z0-9_.-]+", r"\1***", c)
-print(c[:500])' 2>/dev/null || echo "[REDACT-FAIL-TRUNCATED]")
-printf '{"ts":"%s","src":"%s","session":"%s","tool":"%s","cmd":"%s"}\n' \
-  "$TS" "$TYPE" "$SESSION" "$TOOL" "$CMD" >> "$LOG"
-
-# 熔断器: 单会话连续 deny ≥ 阈值 → 写告警文件(fail-loudly, 不阻断进程)
-if [ "$TYPE" = "deny" ] && [ "$SESSION" != "null" ]; then
-  CONSEC=$(grep "\"session\":\"$SESSION\"" "$LOG" 2>/dev/null | grep -E '"src":"(deny|reject)"' | tail -8 | awk '{print ($0 ~ /"src":"(deny|reject)"/) ? "D" : "X"}' | tr -d '\n' | grep -o "D*$" | tr -d '\n' | wc -c)
-  if [ "${CONSEC:-0}" -ge 5 ]; then
-    printf '{"ts":"%s","alert":"circuit-breaker","session":"%s","consecutive_denies":%s}\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SESSION" "$CONSEC" >> "$DIR/alerts.jsonl"
-  fi
-fi
+etype,ts,raw=sys.argv[1],sys.argv[2],sys.argv[3]
+try: d=json.loads(raw or "{}")
+except Exception: d={}
+g=lambda k:(d.get(k) if isinstance(d.get(k),str) else "null")
+cmd=str(d.get("command") or d.get("input") or "")
+cmd=re.sub(r"(sk-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]+",r"\1***",cmd)
+cmd=re.sub(r"(Bearer\s+[A-Za-z0-9_.-]{8})[A-Za-z0-9_.-]+",r"\1***",cmd)
+print(json.dumps({"ts":ts,"src":etype,"session":g("sessionID"),"tool":g("tool"),"cmd":cmd[:500]},ensure_ascii=False,separators=(",",":")))
+PYAUDIT
+# 真连续 deny 熔断(末尾连续计数)
+[ "$TYPE" = "deny" ] && command -v python3 >/dev/null 2>&1 && \
+python3 - "$LOG" >> "$DIR/alerts.jsonl" 2>/dev/null << 'PYCB' || true
+import json,sys,datetime
+try:
+    rows=[json.loads(l) for l in open(sys.argv[1]).readlines()[-30:] if l.strip()]
+    rows=[r for r in rows if r.get("session") not in (None,"null")]
+    n=0
+    for r in reversed(rows):
+        if r.get("src") in ("deny","reject"): n+=1
+        else: break
+    if n>=5: print(json.dumps({"ts":datetime.datetime.utcnow().isoformat(timespec="seconds")+"Z","alert":"circuit-breaker","session":rows[-1]["session"],"consecutive_denies":n}))
+except Exception: pass
+PYCB
 HOOK
   chmod +x "$AUDIT_DIR/hook.sh"
-  echo "✓ 审计目录: $AUDIT_DIR" >&2
-  echo "✓ hook 脚本就位(含密钥脱敏 + 熔断器)" >&2
+  CFG="$HOME/.config/opencode/opencode.json"
+  if command -v python3 >/dev/null 2>&1 && [ -f "$CFG" ]; then
+    python3 - "$CFG" "$AUDIT_DIR" << 'PYEOF' >/dev/null
+import json,sys,os
+cfg_path,audit_dir=sys.argv[1],sys.argv[2]
+try: c=json.load(open(cfg_path))
+except Exception: c={"$schema":"https://opencode.ai/config.json"}
+c["event"]={k:[{"type":"command","command":f"{audit_dir}/hook.sh {k.split('.')[1]}"}] for k in ["permission.ask","permission.deny","permission.allow","permission.reject"]}
+tmp=cfg_path+".tmp"; json.dump(c,open(tmp,"w"),ensure_ascii=False,indent=1); os.replace(tmp,cfg_path)
+PYEOF
+    echo "  ✓ 审计 hook 接线(四通道+JSON 安全)" >&2
+  else
+    echo "  ⚠ 无 python3,手动合并 event 段" >&2
+  fi
+  echo "✓ 审计目录: $AUDIT_DIR(脱敏+熔断+30天)" >&2
 }
 
 rotate() {
-  [ -f "$LOG" ] || { echo "无日志"; exit 0; }
-  SIZE=$(stat -c%s "$LOG")
-  if [ "$SIZE" -gt "$MAX_BYTES" ]; then
+  [ -f "$LOG" ] || exit 0
+  SIZE=$(stat -c%s "$LOG" 2>/dev/null || stat -f%z "$LOG" 2>/dev/null || echo 0)
+  [ "$SIZE" -gt "$MAX_BYTES" ] && {
     for i in $(seq $((KEEP-1)) -1 1); do [ -f "$LOG.$i" ] && mv "$LOG.$i" "$LOG.$((i+1))"; done
-    mv "$LOG" "$LOG.1"
-    echo "✓ 轮转完成 ($((SIZE/1024))KB → $LOG.1)" >&2
-  fi
-  # 30 天过期(含轮转文件)
+    mv "$LOG" "$LOG.1"; echo "✓ 轮转" >&2
+  }
   find "$AUDIT_DIR" -name "audit.jsonl*" -mtime +"$MAX_AGE_DAYS" -delete 2>/dev/null || true
-  echo "✓ 过期清理(>${MAX_AGE_DAYS}天)完成" >&2
 }
 
 case "${1:-init}" in

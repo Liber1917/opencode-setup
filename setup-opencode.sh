@@ -34,7 +34,7 @@ step_summary() {
   local i total=0
   echo ""
   echo -e "${YELLOW}=== 各环节耗时 ===${NC}"
-  for i in $(seq 1 11); do
+  for i in $(seq 1 12); do
     [ -z "${STEP_TIMES[$i]:-}" ] && continue
     printf "  [%s/12] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
     total=$(( total + STEP_TIMES[$i] ))
@@ -84,9 +84,14 @@ step_begin
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
-  echo -n "是否备份后重新生成? (y/n) [n]: "
-  read -r overwrite
-  overwrite=${overwrite:-n}
+  if [ -t 0 ]; then
+    echo -n "是否备份后重新生成? (y/n) [n]: "
+    read -r overwrite
+    overwrite=${overwrite:-n}
+  else
+    overwrite=n  # U-10: 管道安装(非交互)默认不覆盖,防 read 吞脚本后续行
+    echo -e "${YELLOW}  非交互模式: 保留现有配置${NC}"
+  fi
   if [[ $overwrite =~ ^[Yy]$ ]]; then
     backup_dir="$HOME/opencode-backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$backup_dir"
@@ -786,9 +791,6 @@ if command -v rtk &> /dev/null; then
   rtk telemetry disable >/dev/null 2>&1 || true
 fi
 
-# 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
-# shellcheck source=/dev/null
-. "$HOME/.bashrc" 2>/dev/null || true
 
 step_end 11 "安装 RTK"
 
@@ -801,63 +803,79 @@ step_begin
 echo -e "${YELLOW}[12/12] 安全与能力增强模块...${NC}"
 
 MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
+  PERM_TMP=$(mktemp)
+  trap "rm -f \"$PERM_TMP\"" RETURN
 
 if [ "$SKIP_SECURITY" = "1" ]; then
   echo -e "${BLUE}  - 已跳过（SKIP_SECURITY=1）${NC}"
-elif [ -d "$(dirname "$0")/e-modules" ]; then
+elif [ -d "$SCRIPT_DIR/e-modules" ]; then
   # 部署 e-modules 到配置目录
   mkdir -p "$MOD_DIR" "$MOD_DIR/devcontainer"
-  cp "$(dirname "$0")/e-modules/"*.sh "$MOD_DIR/" 2>/dev/null
-  cp "$(dirname "$0")/e-modules/devcontainer/"*.json "$(dirname "$0")/e-modules/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
+  cp "$SCRIPT_DIR/e-modules/"*.sh "$MOD_DIR/" 2>/dev/null
+  cp "$SCRIPT_DIR/e-modules/devcontainer/"*.json "$SCRIPT_DIR/e-modules/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
   chmod +x "$MOD_DIR"/*.sh 2>/dev/null
 
   echo -e "${BLUE}  - e-modules 已部署到 $MOD_DIR${NC}"
 
+  export PERM_TMP
   # ① 权限红线(merge 进 opencode.json 的 permission 段)
   if command -v python3 >/dev/null 2>&1; then
-    "$MOD_DIR/gen-permissions.sh" /tmp/.perm.json >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" << 'PYEOF'
+    MERGE_OUT=$("$MOD_DIR/gen-permissions.sh" "$PERM_TMP" >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" "$PERM_TMP" << 'PYEOF'
 import json,sys
-p=sys.argv[1]
+p, perm_file = sys.argv[1], sys.argv[2]
 try:
-    c=json.load(open(p))
-except: c={"$schema":"https://opencode.ai/config.json"}
+    c = json.load(open(p))
+except Exception:
+    c = {"$schema": "https://opencode.ai/config.json"}
 try:
-    perm=json.load(open('/tmp/.perm.json'))['permission']
-    c['permission']=perm
-    json.dump(c,open(p,'w'),ensure_ascii=False,indent=2)
+    perm = json.load(open(perm_file))["permission"]
+    c["permission"] = perm
+    tmp = p + ".tmp"
+    json.dump(c, open(tmp, "w"), ensure_ascii=False, indent=1)
+    import os; os.replace(tmp, p)
     print("OK")
 except Exception as e:
     print(f"SKIP:{e}")
 PYEOF
-    echo -e "${GREEN}  ✓ 权限红线已合并到 opencode.json${NC}"
+) || MERGE_OUT="SKIP:gen-failed"
+    case "$MERGE_OUT" in
+      OK) echo -e "${GREEN}  ✓ 权限红线已合并到 opencode.json${NC}" ;;
+      *) echo -e "${YELLOW}  ⚠ 权限合并未完成($MERGE_OUT)${NC}" ;;
+    esac
   else
     echo -e "${YELLOW}  ⚠ 无 python3，跳过权限合并（可手动运行 $MOD_DIR/gen-permissions.sh）${NC}"
   fi
 
   # ② 审计
-  "$MOD_DIR/audit-init.sh" init >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 审计模块已初始化（JSONL+脱敏+熔断+30天轮转）${NC}"
+  if "$MOD_DIR/audit-init.sh" init >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ 审计模块已初始化（JSONL+脱敏+熔断+30天轮转）${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ 审计模块初始化失败(可手动运行 $MOD_DIR/audit-init.sh)${NC}"
+  fi
 
   # ③ 安全自检 + AGENT-CARD
-  "$MOD_DIR/security-check.sh" 2>&1 | tail -3 | sed 's/^/  /' || true
+  set +e; SEC_OUT=$("$MOD_DIR/security-check.sh" 2>&1); SEC_RC=$?; set -e
+  echo "$SEC_OUT" | tail -4 | sed 's/^/  /'
+  [ $SEC_RC -ne 0 ] && echo -e "${YELLOW}  ⚠ security-check 存在 FAIL 项(退出码 $SEC_RC,完整输出见上)${NC}"
 
   # ④ 合规文档
   "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
 
   # ⑤ B-Ⅰ 环境画像(specs/B-environment.md Phase1)
-  if [ -f "$(dirname "$0")/b-modules/env-profile.sh" ]; then
-    cp "$(dirname "$0")/b-modules/env-profile.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/env-profile.sh"
+  if [ -f "$SCRIPT_DIR/b-modules/env-profile.sh" ]; then
+    cp "$SCRIPT_DIR/b-modules/env-profile.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/env-profile.sh"
     "$MOD_DIR/env-profile.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 环境画像已生成(env-profile.md)${NC}" || true
   fi
 
   # ⑥ C-Ⅰ 自我画像(specs/C-embodiment.md)
-  if [ -f "$(dirname "$0")/c-modules/self-portrait.sh" ]; then
-    cp "$(dirname "$0")/c-modules/self-portrait.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/self-portrait.sh"
+  if [ -f "$SCRIPT_DIR/c-modules/self-portrait.sh" ]; then
+    cp "$SCRIPT_DIR/c-modules/self-portrait.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/self-portrait.sh"
     "$MOD_DIR/self-portrait.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 自我画像已生成(self-portrait.json)${NC}" || true
   fi
 
   # ⑦ D-preset-skills 部署(仓库→用户目录)
-  if [ -d "$(dirname "$0")/preset-skills" ]; then
-    for d in "$(dirname "$0")/preset-skills"/*/; do
+  if [ -d "$SCRIPT_DIR/preset-skills" ]; then
+    for d in "$SCRIPT_DIR/preset-skills"/*/; do
       name=$(basename "$d")
       [ -f "$d/SKILL.md" ] || continue
       if [ -d "$CONFIG_DIR/skills/$name" ]; then
@@ -872,10 +890,10 @@ PYEOF
 
   # ⑧ subagent 路由自检(装后验证 librarian 模型跟随主配置)
   if command -v opencode >/dev/null 2>&1; then
-    ROUTE_OK=$(timeout 60 opencode run --model "$(python3 -c "
-import json
-c=json.load(open('$CONFIG_DIR/oh-my-openagent.json'))
-print(next(iter(c.get('agents',{}).values(),{}).get('model','zhipuai-coding-plan/glm-5.3')))" 2>/dev/null || echo zhipuai-coding-plan/glm-5.3)" '回答:OK' 2>/dev/null | rtk grep -c "OK" || echo 0)
+    ROUTE_MODEL=$(python3 -c "import json;c=json.load(open('$CONFIG_DIR/oh-my-openagent.json'));print(next(iter(c.get('agents',{}).values(),{}).get('model','zhipuai-coding-plan/glm-5.3')))" 2>/dev/null || echo zhipuai-coding-plan/glm-5.3)
+    [ -z "$ROUTE_MODEL" ] && ROUTE_MODEL=zhipuai-coding-plan/glm-5.3
+    ROUTE_OUT=$(timeout 60 opencode run --model "$ROUTE_MODEL" '回答:OK' 2>/dev/null | grep -c OK || true)
+    ROUTE_OK=$(( ${ROUTE_OUT:-0} ))
     [ "$ROUTE_OK" -gt 0 ] 2>/dev/null && echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}" || echo -e "${YELLOW}  ⚠ 路由自检未确认(网络/配额?可手动验证)${NC}"
   fi
 
@@ -898,14 +916,14 @@ echo ""
 echo -e "${YELLOW}下一步:${NC}"
 echo ""
 echo "  1. 如需 API 提供商，编辑 opencode.json 添加 provider 配置:"
-echo "     $EDITOR $CONFIG_DIR/opencode.json"
+echo "     ${EDITOR:-vi} $CONFIG_DIR/opencode.json"
 echo "     e.g. {\"provider\":{\"anthropic\":{\"options\":{\"apiKey\":\"sk-...\"}}}}"
 echo ""
 echo "  2. 如使用 DeepSeek 等兼容 API，baseURL 填:"
 echo '     "https://api.deepseek.com/anthropic"'
 echo ""
 echo "  3. 调整模型路由（可选）:"
-echo "     $EDITOR $CONFIG_DIR/oh-my-openagent.json"
+echo "     ${EDITOR:-vi} $CONFIG_DIR/oh-my-openagent.json"
 echo "     为 agent 添加 model 字段即可覆盖默认模型，例如:"
 echo '     "oracle": {"model": "deepseek/deepseek-v4-flash"}'
 echo ""
@@ -919,7 +937,7 @@ echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"
 echo "  模型路由:     $CONFIG_DIR/oh-my-openagent.json"
 echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
-echo "  GSD 工作流:   $GSD_DIR"
+echo "  GSD 工作流:   $CONFIG_DIR/plugins/gsd"
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
 echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"

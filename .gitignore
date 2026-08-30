@@ -3,3 +3,5 @@
 .codegraph/
 *.png
 .planning/
+.env*
+.env.local

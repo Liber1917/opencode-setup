@@ -11,10 +11,21 @@
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { execFileSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// P-2: 零 spawn 探测(兑现 spec §3 "不 spawn 命令(防 EDR)"口径)—— fs 遍历 PATH + X_OK 检查
+const findInPath = (bin) => {
+  const paths = (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+  for (const p of paths) {
+    try {
+      const full = path.join(p, bin)
+      if (fs.existsSync(full) && fs.accessSync(full, fs.constants.X_OK) === undefined) return full
+    } catch { /* 不可读目录跳过 */ }
+  }
+  return null
+}
 
 // ── Fragment 基类(Phase 2)────────────────────────────
 class Fragment {
@@ -24,8 +35,10 @@ class Fragment {
   probe() { throw new Error('not implemented') }
   render() {
     if (this._cache) return this._cache
-    try { this._cache = this.probe(); this._state = 'Ready' }
-    catch { this._state = 'Failed' }
+    try {
+      this._cache = this.probe()   // null = 静默跳过(合法,非失败)
+      this._state = this._cache === null ? 'Skipped' : 'Ready'
+    } catch { this._state = 'Failed' }  // P-3: 不缓存失败,下轮重试
     return this._cache
   }
 }
@@ -35,7 +48,7 @@ class EnvFragment extends Fragment {
   constructor() { super('env') }
   probe() {
     const tools = ['node','npm','bun','git','curl','python3','rg','codegraph'].filter(t => {
-      try { execFileSync('which', [t], {stdio:'ignore', timeout: 2000}); return true } catch { return false }
+      findInPath(t) !== null
     })
     return `<env>\n  Platform: ${process.platform} ${process.arch}\n  Today: ${new Date().toDateString()}\n  Tools: ${tools.join(', ') || 'none detected'}\n</env>`
   }
@@ -47,9 +60,14 @@ class GitFragment extends Fragment {
   probe() {
     const gitDir = path.join(this.dir, '.git')
     if (!fs.existsSync(gitDir)) return null // 非 git 仓库: 不注入(静默)
-    const branch = execFileSync('git',['rev-parse','--abbrev-ref','HEAD'],{cwd:this.dir,timeout:2000}).toString().trim()
-    const last = execFileSync('git',['log','-1','--oneline'],{cwd:this.dir,timeout:2000}).toString().trim()
-    return `  Git: ${branch} (last: ${last})`
+    // P-1: 不读 commit subject(克隆仓库中攻击者可控,注入面);branch+短 hash 足够定向
+    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim()
+    if (!head.startsWith('ref: ')) return `  Git: (detached) ${head.slice(0, 12)}` // sha
+    const ref = head.slice(5)
+    let sha = ''
+    try { sha = fs.readFileSync(path.join(gitDir, ref), 'utf8').trim().slice(0, 12) } catch { /* 引用不存在 */ }
+    const branch = ref.split('/').pop()
+    return `  Git: ${branch}${sha ? ' @ ' + sha : ''}`
   }
 }
 
@@ -58,7 +76,7 @@ class CodegraphFragment extends Fragment {
   constructor(dir) { super('codegraph'); this.dir = dir; this._checked = false }
   probe() {
     // 能力就绪声明,不注入结构(spec 2.1)
-    const installed = (() => { try { execFileSync('which',['codegraph'],{stdio:'ignore',timeout:2000}); return true } catch { return false } })()
+    const installed = findInPath('codegraph') !== null
     if (!installed) return null // 未安装: 静默(结构理解靠 glob/grep)
     const idx = fs.existsSync(path.join(this.dir,'.codegraph')) || fs.existsSync(path.join(this.dir,'.codegraph','graph.db'))
     if (idx) return '  Codegraph: ready → 遇到"谁调用X/X怎么工作"优先查 codegraph'
@@ -94,8 +112,7 @@ export const EnvPlugin = async ({ client, directory }) => {
       if (!first?.parts?.length) return
       if (first.parts.some(p => p.type === 'text' && p.text?.includes(MARK))) return // 幂等
       const text = `<!--${MARK}-->\n${buildBlock()}`
-      const ref = first.parts[0]
-      first.parts.unshift({ ...ref, type: 'text', text })
+      first.parts.unshift({ type: 'text', text })
     },
   }
 }

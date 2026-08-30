@@ -21,11 +21,17 @@ EOF
 }
 
 parse_tasks() {  # 输出: id|status|owner|depends
-  rtk grep -E "^## " "$STATE_FILE" 2>/dev/null | awk -F' *[|] *' '{
+  # O-2: 系统 grep(rtk 是 LLM 展示层工具,缺失即静默失效)
+  grep -E "^## " "$STATE_FILE" 2>/dev/null | awk -F' *[|] *' '{
     gsub(/^## /,"",$1); gsub(/^status: /,"",$2); gsub(/^owner: /,"",$3); gsub(/^depends: /,"",$4);
     print $1"|"$2"|"$3"|"$4
   }' || true
 }
+
+# O-3: sed 特殊字符转义(正则元字符)
+esc_re() { printf '%s' "$1" | sed -e 's/[][\.*^$\/]/\\&/g'; }
+# 替换串转义(& 和 \)
+esc_rep() { printf '%s' "$1" | sed -e 's/[&/\]/\\&/g'; }
 
 cmd_status() {
   echo "══ 任务状态($STATE_FILE)══"
@@ -77,7 +83,7 @@ return; }
   while IFS='|' read -r id st own dep; do
     [ "$st" = "active" ] && [ -n "$dep" ] && [ "$dep" != " " ] && {
       for d in $(echo "$dep" | tr ',' ' '); do
-        echo "$DONE_IDS" | rtk grep -qx "$d" || {
+        echo "$DONE_IDS" | grep -qx "$d" || {
           sed -i.bak "s/^## $id | status: active/## $id | status: blocked/" "$STATE_FILE"
           echo "⚖ 漂移: $id 依赖 $d 未完成 → blocked"; DRIFT=$((DRIFT+1)); break; }
       done; }
@@ -86,8 +92,32 @@ return; }
   [ "$DRIFT" = 0 ] && echo "✓ 无漂移(全部一致)"
 }
 
-cmd_claim() { sed -i.bak "s/^## $1 | status: pending/## $1 | status: active | owner: $2/; s/^## $1 | status: pending | owner: /## $1 | status: active | owner: $2 | /" "$STATE_FILE" && rm -f "$STATE_FILE.bak" && echo "✓ $1 → active(owner:$2)"; }
-cmd_done()  { sed -i.bak "s/^## $1 | status: active/## $1 | status: done/" "$STATE_FILE" && rm -f "$STATE_FILE.bak" && echo "✓ $1 → done"; }
+# O-1: 目标行不存在时明确报错(sed 不匹配仍 exit 0 = 假成功)
+require_task() {  # $1=id $2=期望状态 grep 模式
+  grep -qE "^## $(esc_re "$1") \| status: $2" "$STATE_FILE" || {
+    echo "✗ 任务 '$1' 不存在或状态不符(期望 $2);现有:" >&2
+    grep -E "^## " "$STATE_FILE" | head -10 >&2 || echo "  (无任务)" >&2
+    return 1
+  }
+}
+
+cmd_claim() {
+  require_task "$1" 'pending' || return 1
+  local id_re own_rep
+  id_re=$(esc_re "$1"); own_rep=$(esc_rep "$2")
+  # O-6: 整行改写,保持字段结构(两形态: 全字段/裸 pending)
+  sed -i.bak \
+    -e "s/^## $id_re | status: pending | owner: [^|]* | depends: /## $id_re | status: active | owner: $own_rep | depends: /" \
+    -e "s/^## $id_re | status: pending\$/## $id_re | status: active | owner: $own_rep/" \
+    "$STATE_FILE" \
+    && rm -f "$STATE_FILE.bak" && echo "✓ $1 → active(owner:$2)"
+}
+cmd_done() {
+  require_task "$1" 'active' || return 1
+  local id_re; id_re=$(esc_re "$1")
+  sed -i.bak "s/^## $id_re | status: active/## $id_re | status: done/" "$STATE_FILE" \
+    && rm -f "$STATE_FILE.bak" && echo "✓ $1 → done"
+}
 
 case "${1:-help}" in
   init) cmd_init;;
