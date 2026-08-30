@@ -243,6 +243,12 @@ webmap(自研, MIT 干净, 仿 llmstxt-cli 命令形态):
 - 边界与双通道定稿;待做:见 C-5 实施意见(用轮子版)
 - 未决:改进通道的"更优流程"如何被可靠监测(需规则/检索配合,后续细化)
 
+### omo 插件失效事故与修复(2026-08-29)
+- **症状**: task 工具的 subagent_type 里 librarian/oracle/sisyphus-junior 消失(agent list 也无),但 `opencode run --agent librarian` 仍可跑(动态解析与注册分离)
+- **根因**: `~/.config/opencode/node_modules` 里 omo 安装损坏(dist 8-24 时间戳但依赖树经多次 opencode 升级后不一致)
+- **修复**: `cd ~/.config/opencode && npm install oh-my-openagent@latest --save`(重装一致化)→ agent 注册恢复;**重装会覆盖 fallbackChain patch,需重打**(librarian/explore/sisyphus-junior 三 agent 首环注入 zhipuai-coding-plan,两处副本: config node_modules + runtime cache)
+- **教训**: opencode 自动更新会触碰插件依赖树;patch 后的插件在 opencode 大版本升级后应例行检查 agent list 健康度(可用 `opencode agent list | grep -c librarian` 当金丝雀)
+
 ### 生态替换记录(2026-08-28)
 - **superpowers → superpowers-zh(jnMetaCode,7.9k★)**:benchmark 实测 zh 50/54 vs en 45/54(中文触发 2/0、debug 流程更严、翻译无损);setup 默认插件源已换 jnMetaCode/superpowers-zh;注意 zh 基于上游旧快照(brainstorming/executing-plans/subagent-driven-development 落后一次重写);英文环境用户可手动换回 obra/superpowers。报告: benchmarks/superpowers-zh-vs-en/
 
