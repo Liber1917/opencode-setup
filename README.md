@@ -7,6 +7,8 @@
 curl -fsSL "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" | bash
 ```
 
+> ⚠ **管道安装与克隆安装的差异**：安全增强模块（步骤 12：权限红线/审计/AGENT-CARD/合规/webmap 等）**随仓库分发**，管道安装拿不到。需要完整安全增强请用下方克隆方式。
+
 > **开发者**：仓库自带 `.opencode/skills/docker-test-setup` skill——修改脚本后用它跑 Docker 容器矩阵回归（22.04/24.04 全流程、断网降级、幂等）。在 OpenCode 中执行 `/docker-test-setup` 获取完整测试命令与断言清单。
 
 或克隆后运行：
@@ -59,18 +61,18 @@ cd opencode-setup
 
 安装脚本按 12 步执行：
 
-1. 检测非 bash 环境并自动切换
-2. 检测已有配置并备份
-3. 生成 opencode.json / oh-my-openagent.json / Claude settings
-4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
-5. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
-6. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
-7. 通过 Bun 安装 OpenCode
-8. 安装 oh-my-openagent 插件
-9. 安装 GSD Core 工作流（npx 官方安装器）
-10. 安装 CodeGraph CLI
-11. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
-12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过）——部署权限红线（53 条规则）/ 审计模块（脱敏+熔断+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）
+1. 检测已有配置并备份（非 bash 环境在步骤 0 自动切换）
+2. 生成 opencode.json / oh-my-openagent.json / Claude settings
+3. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
+4. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
+5. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
+6. 通过 Bun 安装 OpenCode
+7. 安装 oh-my-openagent 插件
+8. 安装 GSD Core 工作流（npx 官方安装器）
+9. 安装 CodeGraph CLI
+10. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
+11. omo 模型路由补丁（子代理跟随主配置）
+12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件 / opstate / env-profile / self-portrait / preset-skills / 路由自检
 
 ### 自定义路径
 
@@ -117,9 +119,9 @@ export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义
 
 | 模块 | 功能 | 用法 |
 |---|---|---|
-| `gen-permissions.sh` | 权限红线（53 条 bash 规则：18 deny / 7 ask / 23 allow；edit 限 workspace） | 重新生成：`bash gen-permissions.sh` |
+| `gen-permissions.sh` | 权限红线（交互版 59 条 bash 规则：14 deny / 6 ask / 39 常用 allow；无头版 8 条红线） | 重新生成：`bash gen-permissions.sh`（无头：`--headless`） |
 | `audit-init.sh` | 审计模块（JSONL + 密钥脱敏 + 熔断器 + 30 天轮转） | 初始化：`bash audit-init.sh`；轮转：`bash audit-init.sh --rotate` |
-| `security-check.sh` | 安全自检（密钥治理/offline/provenance/注入扫描）+ AGENT-CARD 生成 | 装完跑一次：`bash security-check.sh` |
+| `security-check.sh` | 安全自检（密钥治理/offline/provenance/注入扫描）+ AGENT-CARD 生成 | 装完跑一次：`bash security-check.sh`；开 offline：`bash security-check.sh --offline` |
 | `gen-compliance.sh` | 合规文档（CN/EU 双地区，provider 数据流向清单） | `bash gen-compliance.sh --region cn` |
 | `bwrap-setup.sh` | B 档沙箱一键脚本（clavinculis 优先，降级 opencode-bwrap） | `bash bwrap-setup.sh` |
 | `devcontainer/` | C 档容器隔离模板（非 root + cap-drop） | 见 `devcontainer/README.md` |
@@ -136,13 +138,25 @@ bash c-modules/c-modules-setup.sh --all   # 装 mem0 + SkillOpt
 ### 仓库新增目录
 
 ```
+a-modules/       ←  A 方向联网认知（webmap CLI：llms.txt 站点文档装成 skill，3S 护栏）
+b-modules/       ←  B 方向环境感知（opencode-env 插件 + env-profile.sh）
+c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 安装器 + self-portrait）
+d-modules/       ←  D 方向控制（opstate 声明式任务状态 + fetch-skills 指引）
 e-modules/       ←  E 方向安全模块（6 个脚本 + devcontainer）
-c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 安装器）
 preset-skills/   ←  预设 skill（ai-communication 沟通协议）
-benchmarks/      ←  验证体系与实测报告（VERIFICATION-PIPELINE 等）
-docs/design/     ←  设计资产（五方向规格 + 调研报告）
+benchmarks/      ←  验证体系与实测报告（terminal-bench / review / 对抗测试）
+docs/design/     ←  设计资产（五方向规格 specs/ + 调研报告）
 .opencode/skills/docker-test-setup/  ←  Docker 测试矩阵 skill
 ```
+
+### 装后可用的新命令（克隆安装）
+
+```bash
+webmap install nodejs.org   # A-联网认知：站点 llms.txt → skill（限速/UA/注入隔离/robots 遵守）
+opstate claim t1 alice      # D-控制：声明式任务状态流转（STATE.md 对账）
+env-profile                 # B-环境感知：全量环境画像（env/git/codegraph 三态）
+```
+opencode-env 插件（自动接线）在每会话首条消息注入轻量 env 块，agent 按需读全量画像。
 
 ## 配置
 

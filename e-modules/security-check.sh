@@ -37,7 +37,20 @@ ls .env .env.local 2>/dev/null | head -1 | grep -q . && warn "存在 .env 文件
 hdr "数据主权"
 if command -v python3 >/dev/null; then
   OFFLINE=$(python3 -c "import json;c=json.load(open('$CONFIG_DIR/opencode.json'));print(c.get('offline',False))" 2>/dev/null || echo "err")
-  [ "$OFFLINE" = "True" ] && ok "offline 模式已开" || warn "offline 未开(自动更新/分享/代理三路外联)——国内合规场景建议开启"
+  if [ "${1:-}" = "--offline" ]; then
+    # 动作模式: 写入 offline 开关(spec E-2 ③"配置一行")
+    python3 -c "
+import json
+p='$CONFIG_DIR/opencode.json'
+c=json.load(open(p)); c['offline']=True
+t=p+'.tmp'; json.dump(c,open(t,'w'),ensure_ascii=False,indent=1)
+import os; os.replace(t,p)"
+    ok "offline 已写入 opencode.json(自动更新/分享/代理三路关闭)"
+  elif [ "$OFFLINE" = "True" ]; then
+    ok "offline 模式已开"
+  else
+    warn "offline 未开(自动更新/分享/代理三路外联)——开启: $0 --offline"
+  fi
 fi
 
 # ── 3. 供应链(装时一次) ──────────────────────
@@ -81,9 +94,10 @@ cat > "$CARD" << EOF2
 - **插件**: oh-my-openagent / superpowers(见 opencode.json plugin 数组)
 
 ## 自主度
-- 权限模式: 规则表 deny-first(bash 高危 deny / 花钱发布 ask / 只读 allow)
-- escalation: ask 通道单次放行, 授权不持久
-- 熔断: 单会话连续 5 次 deny → 告警(audit alerts.jsonl)
+- 权限模式: 规则表 deny-first(bash 高危 deny / 花钱发布 ask / 常用只读 allow / 未知 ask)
+- escalation: 无独立通道——由 ask 通道承载(人在场逐次授权,授权不持久)
+- 熔断: 单会话连续 5 次 deny → 告警;单会话工具调用 ≥ 300 → 成本告警(audit alerts.jsonl)
+- 成本上限: timeout 全链生效(路由自检 60s/审计写 30s);调用量告警为预算代理指标
 
 ## 审计
 - 位置: ~/.local/share/opencode-audit/audit.jsonl(observe-only, 30 天保留)

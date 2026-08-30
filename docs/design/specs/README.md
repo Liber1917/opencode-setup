@@ -5,13 +5,13 @@
 
 ## 文件
 
-| 文件 | 方向 | 当前状态 |
+| 文件 | 方向 | 当前状态(2026-08-30 双评审后) |
 |---|---|---|
-| B-environment.md | 环境感知(world-state/fragment/状态机) | ⚠️ 未实装(Phase1-4 待做) |
-| A-webmap.md | 联网认知(webmap CLI+3S 护栏) | ❌ 未实装 |
-| C-embodiment.md | 具身认知(画像/双通道/模型适配) | ⚠️ c-modules 仅装 CLI,画像/目录未落 |
-| D-control.md | 控制(skill 构成/协调/拓扑) | ⚠️ 评审完,skill 集合未部署 |
-| E-security.md | 安全(E 六模块) | ✅ e-modules/ 已实装+benchmark 验证 |
+| B-environment.md | 环境感知(world-state/fragment/状态机) | ✅ 实装+部署接线(插件三Fragment/env-profile;§4 权限通道以直读fs折衷,无spawn) |
+| A-webmap.md | 联网认知(webmap CLI+3S 护栏) | ✅ 实装+部署(限速/UA/robots遵守/审计日志/注入fail-closed/sha256指纹;注册表预锁hash未做→装后指纹) |
+| C-embodiment.md | 具身认知(画像/双通道/模型适配) | ✅ 实装(双通道目录/模板/0600画像;mem0/SkillOpt 手动装已文档化) |
+| D-control.md | 控制(skill 构成/协调/拓扑) | ✅ 机制实装+部署(opstate/preset-skills/fetch指引含grilling;skill内容按版权边界手动摘取) |
+| E-security.md | 安全(E 六模块) | ✅ 实装+部署(59规则/审计+成本告警/AGENT-CARD/合规;escalation由ask通道承载,budget=调用量代理告警) |
 
 ## 实施任务清单(按优先级)
 
@@ -30,3 +30,10 @@
 ### 第三批(Phase 2-4)
 - [x] B: opencode-env 插件(b-modules/,三Fragment+注入+幂等,node 单测通过)
 - [x] B: 状态机内嵌于 opstate/env-profile(失败也是信息;env status 由 profile 文件承载)
+
+## 已知折衷(双评审确认,非隐藏缺口)
+- escalation 无原生 justification 通道 → 由 ask 通道承载(人在场逐次授权)
+- E-2⑤ 成本上限 → timeout 全链 + 单会话≥300事件告警(代理指标);原生 budget 待上游
+- S2 注册表 sha256 → 装后指纹记录+update 校验(预锁内容hash会随上游更新误报)
+- B §4 权限集成 → 插件直读文件系统(零 spawn,防EDR口径优先)
+- D-1 grilling/discernment-nudge → fetch-skills 指引(上游MIT,用户自行摘取)

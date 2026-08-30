@@ -38,6 +38,17 @@ try:
         if r.get("src") in ("deny","reject"): n+=1
         else: break
     if n>=5: print(json.dumps({"ts":datetime.datetime.utcnow().isoformat(timespec="seconds")+"Z","alert":"circuit-breaker","session":rows[-1]["session"],"consecutive_denies":n}))
+    # E-2⑤ 成本上限(零开销代理指标): 单会话事件量 ≥300 → 成本告警
+    # 注: 上文 rows 只含最近 30 条(熔断窗口),成本计数扫全文件(≤10MB 有轮转上限)
+    from collections import Counter
+    cnt=Counter()
+    for l in open(sys.argv[1]):
+        try:
+            r=json.loads(l); sid=r.get("session")
+            if sid not in (None,"null"): cnt[sid]+=1
+        except Exception: pass
+    hot=[(sid,c) for sid,c in cnt.most_common(1) if c>=300]
+    if hot: print(json.dumps({"ts":datetime.datetime.utcnow().isoformat(timespec="seconds")+"Z","alert":"cost-ceiling","top_session":hot[0][0],"events":hot[0][1]}))
 except Exception: pass
 PYCB
 HOOK

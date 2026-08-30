@@ -11,6 +11,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 set -e
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -256,7 +257,7 @@ else
           if $SUDO apt-get update >/dev/null 2>&1; then
             echo -e "${GREEN}✓ apt update 验证通过${NC}"
           else
-            echo -e "${YELLOW}⚠ apt update 失败，还原原源: sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
+            echo -e "${YELLOW}⚠ apt update 失败，请手动还原(命令): sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
           fi
         fi
       else
@@ -803,8 +804,9 @@ step_begin
 echo -e "${YELLOW}[12/12] 安全与能力增强模块...${NC}"
 
 MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
-  PERM_TMP=$(mktemp)
-  trap "rm -f \"$PERM_TMP\"" RETURN
+PERM_TMP=$(mktemp)
+_prev_trap() { step_summary; rm -f "$PERM_TMP" 2>/dev/null || true; }
+trap _prev_trap EXIT
 
 if [ "$SKIP_SECURITY" = "1" ]; then
   echo -e "${BLUE}  - 已跳过（SKIP_SECURITY=1）${NC}"
@@ -829,7 +831,20 @@ except Exception:
     c = {"$schema": "https://opencode.ai/config.json"}
 try:
     perm = json.load(open(perm_file))["permission"]
-    c["permission"] = perm
+    merged = c.get("permission", {})
+    for cat, rules in perm.items():
+        if isinstance(rules, dict):
+            base = merged.get(cat, {})
+            if isinstance(base, str):
+                base = {} if rules else base
+            for k, v in rules.items():
+                # deny 不可被既有 allow 稀释;其余新规则覆盖
+                if v == "deny" or k not in base:
+                    base[k] = v
+            merged[cat] = base
+        else:
+            merged[cat] = rules
+    c["permission"] = merged
     tmp = p + ".tmp"
     json.dump(c, open(tmp, "w"), ensure_ascii=False, indent=1)
     import os; os.replace(tmp, p)
@@ -854,12 +869,44 @@ PYEOF
   fi
 
   # ③ 安全自检 + AGENT-CARD
-  set +e; SEC_OUT=$("$MOD_DIR/security-check.sh" 2>&1); SEC_RC=$?; set -e
-  echo "$SEC_OUT" | tail -4 | sed 's/^/  /'
-  [ $SEC_RC -ne 0 ] && echo -e "${YELLOW}  ⚠ security-check 存在 FAIL 项(退出码 $SEC_RC,完整输出见上)${NC}"
+  set +e; SEC_OUT=$(cd "$HOME" && "$MOD_DIR/security-check.sh" 2>&1); SEC_RC=$?; set -e
+  echo "$SEC_OUT" | sed 's/^/  /'   # UX-3: 完整透出(警告可读才可行动)
+  [ $SEC_RC -ne 0 ] && echo -e "${YELLOW}  ⚠ security-check 存在 FAIL 项(退出码 $SEC_RC)${NC}"
 
   # ④ 合规文档
   "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
+
+  # ④b A-webmap 部署(联网认知 CLI, 装 ~/.local/bin)
+  if [ -f "$SCRIPT_DIR/a-modules/webmap" ]; then
+    mkdir -p "$HOME/.local/bin"
+    cp "$SCRIPT_DIR/a-modules/webmap" "$HOME/.local/bin/webmap" && chmod +x "$HOME/.local/bin/webmap"
+    echo -e "${BLUE}  - webmap → ~/.local/bin/webmap(A-联网认知:init/search/install/update)${NC}"
+  fi
+
+  # ④c B-opencode-env 插件部署(消息注入 env 块,三 Fragment)
+  if [ -f "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" ]; then
+    mkdir -p "$CONFIG_DIR/plugins/opencode-env"
+    cp "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" "$CONFIG_DIR/plugins/opencode-env/plugin.js"
+    # 接线: opencode.json plugin 数组追加本地路径
+    python3 - "$CONFIG_DIR/opencode.json" << 'PYPLUG' 2>/dev/null || true
+import json,sys,os
+p=sys.argv[1]
+c=json.load(open(p))
+plugs=c.get("plugin",[])
+local="./plugins/opencode-env/plugin.js"
+if local not in plugs: plugs.append(local)
+c["plugin"]=plugs
+t=p+".tmp"; json.dump(c,open(t,"w"),ensure_ascii=False,indent=1); os.replace(t,p)
+PYPLUG
+    echo -e "${GREEN}  ✓ opencode-env 插件已部署并接线(env/git/codegraph 三片段注入)${NC}"
+  fi
+
+  # ④d D-opstate 部署(声明式状态对账 CLI)
+  if [ -f "$SCRIPT_DIR/d-modules/opstate" ]; then
+    cp "$SCRIPT_DIR/d-modules/opstate" "$HOME/.local/bin/opstate" 2>/dev/null || { mkdir -p "$HOME/.local/bin"; cp "$SCRIPT_DIR/d-modules/opstate" "$HOME/.local/bin/opstate"; }
+    chmod +x "$HOME/.local/bin/opstate"
+    echo -e "${BLUE}  - opstate → ~/.local/bin/opstate(D-声明式任务状态对账)${NC}"
+  fi
 
   # ⑤ B-Ⅰ 环境画像(specs/B-environment.md Phase1)
   if [ -f "$SCRIPT_DIR/b-modules/env-profile.sh" ]; then
@@ -894,7 +941,12 @@ PYEOF
     [ -z "$ROUTE_MODEL" ] && ROUTE_MODEL=zhipuai-coding-plan/glm-5.3
     ROUTE_OUT=$(timeout 60 opencode run --model "$ROUTE_MODEL" '回答:OK' 2>/dev/null | grep -c OK || true)
     ROUTE_OK=$(( ${ROUTE_OUT:-0} ))
-    [ "$ROUTE_OK" -gt 0 ] 2>/dev/null && echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}" || echo -e "${YELLOW}  ⚠ 路由自检未确认(网络/配额?可手动验证)${NC}"
+    if [ "$ROUTE_OK" -gt 0 ] 2>/dev/null; then
+      echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}"
+    else
+      echo -e "${YELLOW}  ⚠ 路由自检未确认,手动验证:${NC}"
+      echo "      opencode run --model $ROUTE_MODEL '回答:OK'"
+    fi
   fi
 
   echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"
@@ -931,7 +983,7 @@ echo "  4. 运行 OpenCode:"
 echo "     opencode"
 echo ""
 echo "  5. 查看已安装的 skills:"
-echo '     skill({name: "superpowers/brainstorming"})  // 中文版(zh)'
+echo '     ls ~/.config/opencode/skills/   # superpowers 为插件,内置 /brainstorming 等斜杠命令'
 echo ""
 echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"
@@ -940,8 +992,10 @@ echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
 echo "  GSD 工作流:   $CONFIG_DIR/plugins/gsd"
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
-echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
-echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
-echo "  如果输入 'opencode' 仍报错 'node: not found'，请执行:"
-echo "    source ~/.bashrc"
-echo "  或重启终端"
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
+  echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
+  echo "  如果输入 'opencode' 仍报错 'node: not found'，请执行:"
+  echo "    source ~/.bashrc"
+  echo "  或重启终端"
+fi

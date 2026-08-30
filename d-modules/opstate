@@ -105,18 +105,29 @@ cmd_claim() {
   require_task "$1" 'pending' || return 1
   local id_re own_rep
   id_re=$(esc_re "$1"); own_rep=$(esc_rep "$2")
-  # O-6: 整行改写,保持字段结构(两形态: 全字段/裸 pending)
+  # O-6: 整行改写;owner 字段容忍空值/空格([^|]* 覆盖 "owner: |" 形态)
   sed -i.bak \
-    -e "s/^## $id_re | status: pending | owner: [^|]* | depends: /## $id_re | status: active | owner: $own_rep | depends: /" \
+    -e "s/^## $id_re | status: pending | owner: [^|]*| depends: /## $id_re | status: active | owner: $own_rep | depends: /" \
     -e "s/^## $id_re | status: pending\$/## $id_re | status: active | owner: $own_rep/" \
-    "$STATE_FILE" \
-    && rm -f "$STATE_FILE.bak" && echo "✓ $1 → active(owner:$2)"
+    "$STATE_FILE"
+  # 假成功防线: sed 不匹配仍 exit 0 → 变更后复核(状态真变 active 才算成功)
+  rm -f "$STATE_FILE.bak"
+  if grep -qE "^## $id_re \| status: active \| owner: " "$STATE_FILE"; then
+    echo "✓ $1 → active(owner:$2)"
+  else
+    echo "✗ $1 状态未变更(行格式非标准,请检查 STATE.md 该行字段)" >&2; return 1
+  fi
 }
 cmd_done() {
   require_task "$1" 'active' || return 1
   local id_re; id_re=$(esc_re "$1")
-  sed -i.bak "s/^## $id_re | status: active/## $id_re | status: done/" "$STATE_FILE" \
-    && rm -f "$STATE_FILE.bak" && echo "✓ $1 → done"
+  sed -i.bak "s/^## $id_re | status: active/## $id_re | status: done/" "$STATE_FILE"
+  rm -f "$STATE_FILE.bak"
+  if grep -qE "^## $id_re \| status: done" "$STATE_FILE"; then
+    echo "✓ $1 → done"
+  else
+    echo "✗ $1 状态未变更(行格式非标准)" >&2; return 1
+  fi
 }
 
 case "${1:-help}" in
