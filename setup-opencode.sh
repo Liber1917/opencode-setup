@@ -973,7 +973,7 @@ const fs=require("fs");
 const files=[process.env.HOME+"/.config/opencode/node_modules/oh-my-openagent/dist/index.js",
              ...fs.readdirSync(process.env.HOME+"/.cache/opencode/packages").filter(d=>d.startsWith("oh-my-openagent@")).map(d=>process.env.HOME+"/.cache/opencode/packages/"+d+"/node_modules/oh-my-openagent/dist/index.js")].filter(f=>{try{return fs.existsSync(f)}catch{return false}});
 let hit=0,total=0;
-for(const f of files){total++;try{if(fs.readFileSync(f,"utf8").includes("follow-system-default"))hit++}catch{}}
+for(const f of files){total++;try{if(fs.readFileSync(f,"utf8").includes("Model resolved via system default"))hit++}catch{}}
 console.log(hit+"/"+total)' 2>/dev/null || echo "0/0")
     echo -e "${BLUE}  - omo patch 标记: $PATCH_MARK 副本命中(运行时副本未命中时重跑本脚本补打)${NC}"
   fi
