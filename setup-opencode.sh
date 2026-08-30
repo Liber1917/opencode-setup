@@ -635,6 +635,17 @@ if [ -f "$CONFIG_DIR/node_modules/oh-my-openagent/dist/index.js" ] && node "$OMO
 else
   echo -e "${YELLOW}⚠ omo 补丁失败（omo 版本可能已变化，子代理将回退硬编码模型链）${NC}"
 fi
+# 运行时副本: opencode 实际从 ~/.cache/opencode/packages/ 加载插件,该副本不打=补丁运行时无效
+CACHE_OKO=0
+for RT in "$HOME/.cache/opencode/packages/oh-my-openagent@"*/node_modules/oh-my-openagent/dist/index.js; do
+  [ -f "$RT" ] || continue
+  if node "$OMO_PATCH_FILE" "$RT"; then CACHE_OKO=1; fi
+done
+if [ "$CACHE_OKO" = 1 ]; then
+  echo -e "${GREEN}✓ omo 运行时副本补丁已应用（~/.cache/opencode/packages/）${NC}"
+else
+  echo -e "${BLUE}  - 运行时副本未找到（首次启动 opencode 后才生成,届时重跑本脚本补打）${NC}"
+fi
 rm -f "$OMO_PATCH_FILE"
 
 # ------------------------------------------------------------------
@@ -956,6 +967,15 @@ PYPLUG
       echo -e "${YELLOW}  ⚠ 路由自检未确认,手动验证:${NC}"
       echo "      opencode run --model $ROUTE_MODEL '回答:OK'"
     fi
+    # patch 标记核对(两副本;自检必须能发现 patch 失效)
+    PATCH_MARK=$(node -e '
+const fs=require("fs");
+const files=[process.env.HOME+"/.config/opencode/node_modules/oh-my-openagent/dist/index.js",
+             ...fs.readdirSync(process.env.HOME+"/.cache/opencode/packages").filter(d=>d.startsWith("oh-my-openagent@")).map(d=>process.env.HOME+"/.cache/opencode/packages/"+d+"/node_modules/oh-my-openagent/dist/index.js")].filter(f=>{try{return fs.existsSync(f)}catch{return false}});
+let hit=0,total=0;
+for(const f of files){total++;try{if(fs.readFileSync(f,"utf8").includes("follow-system-default"))hit++}catch{}}
+console.log(hit+"/"+total)' 2>/dev/null || echo "0/0")
+    echo -e "${BLUE}  - omo patch 标记: $PATCH_MARK 副本命中(运行时副本未命中时重跑本脚本补打)${NC}"
   fi
 
   echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"

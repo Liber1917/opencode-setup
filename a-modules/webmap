@@ -129,14 +129,30 @@ cmd_install() {
   # S2: 内容指纹入库(update 时校验,变化=上游被改或传输损坏 → 警告)
   local sha
   sha=$(printf '%s' "$content" | sha256sum | cut -c1-16)
+  # 同域名替换旧行(防 update 反复追加)
+  if grep -qF "$domain|" "$WM_DIR/installed.list" 2>/dev/null; then
+    sed -i.bak "\|^$domain|d" "$WM_DIR/installed.list" && rm -f "$WM_DIR/installed.list.bak"
+  fi
   echo "$domain|$name|$sha|$(date +%s)" >> "$WM_DIR/installed.list"
   echo "✓ 已装: skills/$name/SKILL.md (信任级:$trusted)"
 }
 
 cmd_update() {
   [ -f "$WM_DIR/installed.list" ] || { echo "无已装项"; exit 0; }
-  while read -r domain name ts; do
+  # 新格式: domain|name|sha16|ts(旧格式 domain name ts 自动兼容)
+  while IFS='|' read -r domain name old_sha ts; do
+    [ -z "$domain" ] && continue
+    case "$domain" in \#*|"") continue;; esac
     echo "→ 刷新 $domain"
+    if [ -n "$old_sha" ] && [ "$old_sha" != "${ts:-}" ]; then
+      # S2 指纹比对: 记录装后指纹,刷新前先探测比对
+      NEW_SHA=$(printf '%s' "$(fetch "https://$domain/llms.txt")" | sha256sum | cut -c1-16)
+      if [ -n "$NEW_SHA" ] && [ "$NEW_SHA" != "$old_sha" ]; then
+        echo "  ⚠ 内容指纹变化($old_sha → $NEW_SHA): 上游被改或损坏,请人工确认后重装"
+        audit_log "$domain" "sha-changed"
+        continue
+      fi
+    fi
     cmd_install "$domain" "$name" || true
   done < "$WM_DIR/installed.list"
 }

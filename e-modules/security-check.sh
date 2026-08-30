@@ -71,7 +71,7 @@ fi
 # ── 4. 注入冒烟(轻量) ────────────────────────
 hdr "注入冒烟"
 if [ -d "$CONFIG_DIR/skills" ]; then
-  SKILL_N=$(ls "$CONFIG_DIR/skills" 2>/dev/null | wc -l)
+  SKILL_N=$(find "$CONFIG_DIR/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
   # 静态扫: skill 文件里的危险模式(curl|sh / 明文外发 / 硬编码密钥)
   timeout 30 grep -rl --include="SKILL.md" -E "curl[^|]*\|[[:space:]]*(ba)?sh|eval\(atob|sk-[A-Za-z0-9]{20,}" "$CONFIG_DIR/skills" > /tmp/.es_danger 2>/dev/null || true
   DANGER=$(wc -l < /tmp/.es_danger 2>/dev/null || echo 0); rm -f /tmp/.es_danger
@@ -82,7 +82,7 @@ fi
 hdr "AGENT-CARD 生成"
 CARD="$CONFIG_DIR/AGENT-CARD.md"
 MCP_LIST=$(python3 -c "import json;c=json.load(open('$CONFIG_DIR/opencode.json'));print(', '.join(c.get('mcp',{}).keys()) or '无')" 2>/dev/null || echo "未知")
-SKILL_N=$(ls "$CONFIG_DIR/skills" 2>/dev/null | wc -l)
+SKILL_N=$(find "$CONFIG_DIR/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l || echo 0)
 cat > "$CARD" << EOF2
 # AGENT-CARD — 本机 agent 环境披露
 
@@ -97,7 +97,7 @@ cat > "$CARD" << EOF2
 - 权限模式: 规则表 deny-first(bash 高危 deny / 花钱发布 ask / 常用只读 allow / 未知 ask)
 - escalation: 无独立通道——由 ask 通道承载(人在场逐次授权,授权不持久)
 - 熔断: 单会话连续 5 次 deny → 告警;单会话工具调用 ≥ 300 → 成本告警(audit alerts.jsonl)
-- 成本上限: timeout 全链生效(路由自检 60s/审计写 30s);调用量告警为预算代理指标
+- 成本上限: timeout 全链生效(路由自检 60s);调用量告警为预算代理指标
 
 ## 审计
 - 位置: ~/.local/share/opencode-audit/audit.jsonl(observe-only, 30 天保留)

@@ -37,3 +37,6 @@
 - S2 注册表 sha256 → 装后指纹记录+update 校验(预锁内容hash会随上游更新误报)
 - B §4 权限集成 → 插件直读文件系统(零 spawn,防EDR口径优先)
 - D-1 grilling/discernment-nudge → fetch-skills 指引(上游MIT,用户自行摘取)
+- D-2 "默认装 29" → 实装 SP 核心 8/16 + AG 0/8(版权边界,fetch-skills 指引覆盖;默认集合=仓库自有 preset + superpowers-zh 插件)
+- E-2 "preset 锁版本" → 插件实际 @latest(锁版本需 pin 机制,未做;npm audit signatures 已做)
+- E-2 审计延迟 → 实测 ~20ms/调用(spec 原文 <1ms 仅为设计目标;轮转上限 40MB≤50MB 达标)
