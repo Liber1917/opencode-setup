@@ -123,6 +123,7 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   cat > "$CONFIG_DIR/opencode.json" << EOF
 {
   "\$schema": "https://opencode.ai/config.json",
+  "model": "zhipuai-coding-plan/glm-5.3",
   "plugin": [
     "oh-my-openagent@latest",
     "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git"
