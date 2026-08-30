@@ -12,6 +12,13 @@ fi
 
 set -e
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APT_UPDATED=0   # 确保 apt install 前 lists 就绪(全新容器/镜像跳过测速时仍可装包)
+apt_ensure_update() {
+  [ "$APT_UPDATED" = 1 ] && return 0
+  command -v apt-get >/dev/null 2>&1 || return 0
+  $SUDO apt-get update -qq >/dev/null 2>&1 || true
+  APT_UPDATED=1
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -280,6 +287,7 @@ echo -e "${YELLOW}[5/12] 检查前置依赖...${NC}"
 if ! command -v unzip &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
   if command -v apt-get &> /dev/null; then
+    apt_ensure_update
     $SUDO apt-get install -y unzip
   elif command -v yum &> /dev/null; then
     $SUDO yum install -y unzip
@@ -343,6 +351,7 @@ if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}npmmirror 下载失败，回退系统包管理器...${NC}"
     if command -v apt-get &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
+      apt_ensure_update
       $SUDO apt-get install -y nodejs
     elif command -v yum &> /dev/null; then
       curl -fsSL https://rpm.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null

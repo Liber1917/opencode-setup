@@ -17,13 +17,13 @@ docker pull ubuntu:22.04 ubuntu:24.04
 
 # 1. 全流程(24.04 deb822 + 自带 python3,含步骤12): 必须退出码 0, 12 步全完成
 #    ⚠ 挂载整个仓库(不只脚本)——步骤12 安全模块随仓库分发,只挂脚本会静默跳过
-docker run --rm -v "$PWD:/repo" ubuntu:24.04 bash -c "bash /repo/setup-opencode.sh"
+docker run --rm -v "$PWD:/repo" ubuntu:24.04 bash -c "apt-get update -qq >/dev/null && apt-get install -y -qq curl git python3 >/dev/null && bash /repo/setup-opencode.sh"
 
 # 2. 22.04(传统 sources.list, 需先装 python3): 必须退出码 0
 docker run --rm -v "$PWD:/repo" ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y -qq python3 && bash /repo/setup-opencode.sh"
 
 # 3. 断网降级: 不崩溃, 优雅失败 + 计时汇总
-docker run --rm --network none -v "$PWD:/repo" ubuntu:24.04 bash -c "bash /repo/setup-opencode.sh"
+docker run --rm --network none -v "$PWD:/repo" ubuntu:24.04 bash -c "apt-get update -qq >/dev/null && apt-get install -y -qq curl git python3 >/dev/null && bash /repo/setup-opencode.sh"
 
 # 4. 幂等: 同一容器跑两次, 第二次也退出码 0
 docker run --name setup-test -v "$PWD:/repo" ubuntu:24.04 bash /c "bash /repo/setup-opencode.sh" \
