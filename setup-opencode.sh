@@ -133,13 +133,20 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   echo -e "${YELLOW}[3/12] 生成配置文件...${NC}"
 
   # opencode.json
+  # superpowers 接入方式: 官方急加载(默认) 或 路由模式(渐进披露,-90% token)
+  # 注意: 本地插件(sp-router/opencode-env)不进 plugin 数组——数组只认 npm 包,
+  # 本地文件靠 ~/.config/opencode/plugins/*.ts 自动发现(rtk.ts 同款姿势)
+  if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ]; then
+    SP_PLUGIN_LINE=''
+  else
+    SP_PLUGIN_LINE='    "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git",'
+  fi
   cat > "$CONFIG_DIR/opencode.json" << EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "model": "zhipuai-coding-plan/glm-5.3",
   "plugin": [
-    "oh-my-openagent@latest",
-    "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git"
+    "oh-my-openagent@latest",$SP_PLUGIN_LINE
   ],
   "permission": {
     "read": {
@@ -648,6 +655,20 @@ else
 fi
 rm -f "$OMO_PATCH_FILE"
 
+# superpowers 路由模式: clone vault + 部署轻插件(默认关闭, SUPERPOWERS_ROUTER=1 启用)
+if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && [ -f "$SCRIPT_DIR/router-modules/sp-router/plugin.js" ]; then
+  SP_VAULT="$CONFIG_DIR/sp-vault/superpowers"
+  if [ -d "$SP_VAULT/.git" ]; then
+    git -C "$SP_VAULT" pull --ff-only >/dev/null 2>&1 || echo -e "${BLUE}  - sp-vault 更新跳过(可手动 git pull)${NC}"
+  else
+    git clone --depth 1 https://github.com/jnMetaCode/superpowers-zh.git "$SP_VAULT" >/dev/null 2>&1 \
+      && echo -e "${GREEN}✓ superpowers vault 已克隆(路由模式)${NC}" \
+      || echo -e "${YELLOW}⚠ vault 克隆失败,sp-router 将无技能可读${NC}"
+  fi
+  sed "s|__SP_VAULT__|$SP_VAULT/skills|g" "$SCRIPT_DIR/router-modules/sp-router/plugin.js" > "$CONFIG_DIR/plugins/sp-router.ts"
+  echo -e "${GREEN}✓ sp-router 已部署 → plugins/sp-router.ts(渐进披露,实测 -90% 起步 token)${NC}"
+fi
+
 # ------------------------------------------------------------------
 # 步骤 9: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
@@ -905,20 +926,8 @@ PYEOF
 
   # ④c B-opencode-env 插件部署(消息注入 env 块,三 Fragment)
   if [ -f "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" ]; then
-    mkdir -p "$CONFIG_DIR/plugins/opencode-env"
-    cp "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" "$CONFIG_DIR/plugins/opencode-env/plugin.js"
-    # 接线: opencode.json plugin 数组追加本地路径
-    python3 - "$CONFIG_DIR/opencode.json" << 'PYPLUG' 2>/dev/null || true
-import json,sys,os
-p=sys.argv[1]
-c=json.load(open(p))
-plugs=c.get("plugin",[])
-local="./plugins/opencode-env/plugin.js"
-if local not in plugs: plugs.append(local)
-c["plugin"]=plugs
-t=p+".tmp"; json.dump(c,open(t,"w"),ensure_ascii=False,indent=1); os.replace(t,p)
-PYPLUG
-    echo -e "${GREEN}  ✓ opencode-env 插件已部署并接线(env/git/codegraph 三片段注入)${NC}"
+    cp "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" "$CONFIG_DIR/plugins/opencode-env.ts"
+    echo -e "${GREEN}  ✓ opencode-env 插件已部署 → plugins/opencode-env.ts(顶层 .ts 自动发现,env/git/codegraph 三片段)${NC}"
   fi
 
   # ④d D-opstate 部署(声明式状态对账 CLI)

@@ -126,6 +126,19 @@ export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义
 | `bwrap-setup.sh` | B 档沙箱一键脚本（clavinculis 优先，降级 opencode-bwrap） | `bash bwrap-setup.sh` |
 | `devcontainer/` | C 档容器隔离模板（非 root + cap-drop） | 见 `devcontainer/README.md` |
 
+### superpowers 路由模式（可选，`SUPERPOWERS_ROUTER=1`）
+
+官方 superpowers 插件急加载实测 **9.2k token/对话起步税**（20 技能描述进 system prompt + using-superpowers 全文进首消息）。路由模式换为渐进披露：
+
+```bash
+SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
+```
+
+- 首条消息只注入 ~400 token 能力清单，agent 命中场景时 `Read` vault 里的技能正文
+- 实测：微任务基线 **936 token（−90%）**，调试任务路由触发与技能遵循正常
+- 取舍：硬约束换发现性（详见 `router-modules/README.md` 诚实边界）
+- 已装用户切换见 `router-modules/README.md`
+
 ### C 方向集成模块（`c-modules/`，手动运行）
 
 ```bash
@@ -138,6 +151,7 @@ bash c-modules/c-modules-setup.sh --all   # 装 mem0 + SkillOpt
 ### 仓库新增目录
 
 ```
+router-modules/  ←  上下文优化（sp-router：superpowers 渐进披露，-90% 起步 token）
 a-modules/       ←  A 方向联网认知（webmap CLI：llms.txt 站点文档装成 skill，3S 护栏）
 b-modules/       ←  B 方向环境感知（opencode-env 插件 + env-profile.sh）
 c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 安装器 + self-portrait）
