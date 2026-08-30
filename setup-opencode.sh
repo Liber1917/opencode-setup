@@ -163,36 +163,38 @@ EOF
   echo -e "${GREEN}  ✓ opencode.json${NC}"
 
   # oh-my-openagent.json
-  # 只注册 agent/category 结构，不设 model = 使用源码内置默认模型 + 回退链
-  # 需要自定义时取消注释或添加 model 字段
-  cat > "$CONFIG_DIR/oh-my-openagent.json" << 'EOF'
+  # 显式 model 必须存在:fallbackChain patch 盖不住 category 解析路径,空配置会
+  # 落到源码内置链(anthropic)→ 子代理 403 静默死(2026-08-30 实测坐实)。
+  # 换模型: OMO_MODEL=<provider/model> 重跑,或直接编辑本文件。
+  OMO_MODEL="${OMO_MODEL:-zhipuai-coding-plan/glm-5.3}"
+  cat > "$CONFIG_DIR/oh-my-openagent.json" << EOF
 {
-  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "\$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
   "agents": {
-    "hephaestus": {},
-    "oracle": {},
-    "librarian": {},
-    "explore": {},
-    "multimodal-looker": {},
-    "prometheus": {},
-    "metis": {},
-    "momus": {},
-    "atlas": {},
-    "sisyphus-junior": {}
+    "hephaestus": {"model": "$OMO_MODEL"},
+    "oracle": {"model": "$OMO_MODEL"},
+    "librarian": {"model": "$OMO_MODEL"},
+    "explore": {"model": "$OMO_MODEL"},
+    "multimodal-looker": {"model": "$OMO_MODEL"},
+    "prometheus": {"model": "$OMO_MODEL"},
+    "metis": {"model": "$OMO_MODEL"},
+    "momus": {"model": "$OMO_MODEL"},
+    "atlas": {"model": "$OMO_MODEL"},
+    "sisyphus-junior": {"model": "$OMO_MODEL"}
   },
   "categories": {
-    "visual-engineering": {},
-    "ultrabrain": {},
-    "deep": {},
-    "artistry": {},
-    "quick": {},
-    "unspecified-low": {},
-    "unspecified-high": {},
-    "writing": {}
+    "visual-engineering": {"model": "$OMO_MODEL"},
+    "ultrabrain": {"model": "$OMO_MODEL"},
+    "deep": {"model": "$OMO_MODEL"},
+    "artistry": {"model": "$OMO_MODEL"},
+    "quick": {"model": "$OMO_MODEL"},
+    "unspecified-low": {"model": "$OMO_MODEL"},
+    "unspecified-high": {"model": "$OMO_MODEL"},
+    "writing": {"model": "$OMO_MODEL"}
   }
 }
 EOF
-  echo -e "${GREEN}  ✓ oh-my-openagent.json（agent 已注册，model 留空=内置默认）${NC}"
+  echo -e "${GREEN}  ✓ oh-my-openagent.json（agents+categories 显式 model=$OMO_MODEL，堵死回退链路由）${NC}"
 
   # Claude settings
   if [ ! -f "$CLAUDE_DIR/settings.json" ]; then

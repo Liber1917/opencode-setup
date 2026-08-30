@@ -27,7 +27,7 @@ cd opencode-setup
 - **环节计时** — 每步结束显示耗时，结束时输出各环节耗时汇总表（含总耗时），定位安装瓶颈一目了然
 - **npm 镜像加速** — 默认 npmmirror，国内网络下安装飞快，可用环境变量覆盖
 - **oh-my-openagent** — 10 个 Agent + 8 个 Category 的模型路由
-- **子代理模型跟随主配置** — 打补丁使子代理默认使用 opencode.json 的 `model`（而非硬编码模型链），显式 omo 配置优先
+- **子代理模型显式路由** — oh-my-openagent.json 为全部 10 agent + 8 category 写显式 model（堵死内置回退链的 claude 路由 403；`OMO_MODEL=<provider/model>` 可换），另有 fallbackChain 补丁双保险
 - **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
 - **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
 - **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 清华 PyPI 源
