@@ -676,27 +676,33 @@ fi
 # ------------------------------------------------------------------
 step_end 8 "安装 oh-my-openagent 插件"
 step_begin
-echo -e "${YELLOW}[9/12] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[9/12] GSD Core 工作流(默认跳过,INSTALL_GSD=1 启用)...${NC}"
 
-# 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
-if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
-  echo -e "${GREEN}✓ GSD Core 命令已存在${NC}"
+# GSD 默认跳过是基准实测定案(完成率零收益/常驻 ~4k tok/模型自发调用 0%),
+# 非疏忽——证据链勿删: benchmarks/terminal-bench/{gsd-3arm,nogsd-3arm,gsd-showcase}.md
+if [ "${INSTALL_GSD:-0}" != "1" ]; then
+  echo -e "${BLUE}  - 已跳过(需要多阶段项目工作流时: INSTALL_GSD=1 重新运行)${NC}"
 else
-  if command -v npx &> /dev/null; then
-    echo "正在安装 GSD Core（官方继任项目，原生支持 OpenCode）..."
-    echo ""
-
-    # GSD Core 官方安装命令
-    # 自动检测 OpenCode 配置目录，安装 agent 和 command 到对应位置
-    npx --yes @opengsd/gsd-core@latest --opencode --global
-
-    echo ""
-    echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
-    echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令${NC}"
+  # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
+  if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
+    echo -e "${GREEN}✓ GSD Core 命令已存在${NC}"
   else
-    echo -e "${YELLOW}⚠ npx 未安装，跳过 GSD Core${NC}"
-    echo "  确保 Node.js 已安装，然后手动执行:"
-    echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
+    if command -v npx &> /dev/null; then
+      echo "正在安装 GSD Core（官方继任项目，原生支持 OpenCode）..."
+      echo ""
+
+      # GSD Core 官方安装命令
+      # 自动检测 OpenCode 配置目录，安装 agent 和 command 到对应目录
+      npx --yes @opengsd/gsd-core@latest --opencode --global
+
+      echo ""
+      echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
+      echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令(用户显式驱动;env 块会注入项目状态)${NC}"
+    else
+      echo -e "${YELLOW}⚠ npx 未安装，跳过 GSD Core${NC}"
+      echo "  确保 Node.js 已安装，然后手动执行:"
+      echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
+    fi
   fi
 fi
 

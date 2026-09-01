@@ -68,7 +68,7 @@ cd opencode-setup
 5. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
 6. 通过 Bun 安装 OpenCode
 7. 安装 oh-my-openagent 插件
-8. 安装 GSD Core 工作流（npx 官方安装器）
+8. GSD Core 工作流（默认跳过,INSTALL_GSD=1 选装）
 9. 安装 CodeGraph CLI
 10. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
 11. omo 模型路由补丁（子代理跟随主配置）
@@ -100,6 +100,7 @@ node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按�
 apt 源测速默认执行：官方源最快则保持不动；若源文件已自定义（非官方域名）则跳过，避免覆盖手动配置。可用环境变量控制：
 
 ```bash
+export INSTALL_GSD=1          # 安装 GSD 工作流（默认跳过，见下文选装说明）
 export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
 export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）
 ./setup-opencode.sh
@@ -257,9 +258,17 @@ agent model > category model > 用户 fallback_models > OpenCode 默认 model > 
 | unspecified-high | 高难度杂项 |
 | writing | 文档、写作 |
 
-## GSD Core 工作流
+## GSD Core 工作流（选装，`INSTALL_GSD=1`）
 
-GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD 的官方继任项目，原生支持 OpenCode。安装后无需额外配置即可使用 `/gsd-*` 命令：
+GSD Core（[open-gsd/gsd-core](https://github.com/open-gsd/gsd-core)）是 GSD 的官方继任项目，原生支持 OpenCode。
+
+> **为什么默认不装**（三轮基准实测，`benchmarks/terminal-bench/gsd-*.md`）：任务完成率零收益（客场 0/6、主场三条件同分）；常驻菜单成本 ~4k token/会话；模型自发调用率 0%（必须用户显式敲命令）。**它的真实价值是多阶段项目的流程产物与提交规范**——需要时再装，不吃默认配置的 token。
+
+```bash
+INSTALL_GSD=1 ./setup-opencode.sh   # 装后 /gsd-* 命令可用
+```
+
+装后无需额外配置即可使用 `/gsd-*` 命令（opencode-env 插件会在 GSD 项目里自动注入当前 phase 状态）：
 
 | 命令 | 功能 |
 |------|------|

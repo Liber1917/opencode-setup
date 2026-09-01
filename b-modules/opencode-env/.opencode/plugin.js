@@ -84,12 +84,37 @@ class CodegraphFragment extends Fragment {
   }
 }
 
+// ── 片段: GSD 项目状态(C2 判决:文件可见≠进决策,必须注入 system 层)──
+class GsdFragment extends Fragment {
+  constructor(dir) { super('gsd'); this.dir = dir }
+  probe() {
+    const planning = path.join(this.dir, '.planning')
+    const roadmap = path.join(planning, 'ROADMAP.md')
+    if (!fs.existsSync(roadmap)) return null // 非 GSD 项目: 静默
+    let phase = '', next = ''
+    try {
+      const rm = fs.readFileSync(roadmap, 'utf8')
+      const m = [...rm.matchAll(/## Phase (\d+).*\n/g)]
+      const inProg = rm.match(/## Phase (\d+)[^\n]*✅?\s*[-–—]*\s*(?:⚡|In [Pp]rogress|进行中)/) || rm.match(/⚡\s*.*Phase (\d+)/)
+      phase = inProg ? inProg[1] : (m.length ? m[m.length - 1][1] : '?')
+    } catch { return null }
+    try {
+      const st = path.join(planning, 'STATE.md')
+      if (fs.existsSync(st)) {
+        const pos = fs.readFileSync(st, 'utf8').match(/Current Position:?\s*(.+)/)
+        if (pos) next = pos[1].trim().slice(0, 80)
+      }
+    } catch { /* STATE 缺失只影响 next */ }
+    return `  GSD: project active, Phase ${phase} in progress${next ? ` — next: ${next}` : ''} (/gsd-progress 查看详情)`
+  }
+}
+
 // ── 注入主逻辑(Phase 1+4)─────────────────────────────
 export const EnvPlugin = async ({ client, directory }) => {
   const workDir = directory || process.cwd()
 
   // Fragment 注册表(Phase 2)
-  const fragments = [ new EnvFragment(), new GitFragment(workDir), new CodegraphFragment(workDir) ]
+  const fragments = [ new EnvFragment(), new GitFragment(workDir), new CodegraphFragment(workDir), new GsdFragment(workDir) ]
   const MARK = 'opencode-env-injected'
 
   const buildBlock = () => {

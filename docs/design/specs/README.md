@@ -40,3 +40,4 @@
 - D-2 "默认装 29" → 实装 SP 核心 8/16 + AG 0/8(版权边界,fetch-skills 指引覆盖;默认集合=仓库自有 preset + superpowers-zh 插件)
 - E-2 "preset 锁版本" → 插件实际 @latest(锁版本需 pin 机制,未做;npm audit signatures 已做)
 - E-2 审计延迟 → 实测 ~20ms/调用(spec 原文 <1ms 仅为设计目标;轮转上限 40MB≤50MB 达标)
+- GSD 默认不装(2026-09-01 降级,三轮基准定案) → INSTALL_GSD=1 选装;env 插件加 GsdFragment 注入项目状态(C2 判决:文件可见 0% 触发,必须 system 层注入);证据 benchmarks/terminal-bench/gsd-showcase.md §4

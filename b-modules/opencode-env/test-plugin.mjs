@@ -33,4 +33,21 @@ const plugin = mod.default
   assert.ok(gitLine.includes('main') && gitLine.includes('abcdef'), 'branch+sha')
   rmSync(d, { recursive: true, force: true })
 }
-console.log('✓ test-plugin: 2 组断言全过')
+// ③ GSD Fragment: 非 GSD 目录静默;有 .planning 注入 phase 状态(C2 判决机制)
+{
+  const d = mkdtempSync(path.join(tmpdir(), 'plg-'))
+  const api = await plugin({ directory: d })
+  let msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api['experimental.chat.messages.transform']({}, { messages: msgs })
+  assert.ok(!msgs[0].parts[0].text.includes('GSD:'), '无 .planning 不注 GSD 行')
+  mkdirSync(path.join(d, '.planning'), { recursive: true })
+  writeFileSync(path.join(d, '.planning', 'ROADMAP.md'), '# Roadmap\n## Phase 1: MVP — In Progress ✅\n- [x] step\n')
+  writeFileSync(path.join(d, '.planning', 'STATE.md'), '---\nstatus: executing\n---\nCurrent Position: Ready to plan Phase 1 tasks\n')
+  const api2 = await plugin({ directory: d })
+  msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api2['experimental.chat.messages.transform']({}, { messages: msgs })
+  const gsdLine = msgs[0].parts[0].text.split('\n').find(l => l.includes('GSD:'))
+  assert.ok(gsdLine && gsdLine.includes('Phase'), '有 .planning 注入 phase: ' + gsdLine)
+  rmSync(d, { recursive: true, force: true })
+}
+console.log('✓ test-plugin: 3 组断言全过')
