@@ -1,6 +1,6 @@
 # opencode-setup
 
-一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、GSD 工作流、CodeGraph MCP 和完整的 Agent 生态。
+一键配置 [OpenCode](https://opencode.ai) 环境，集成 oh-my-openagent、CodeGraph MCP 和完整的 Agent 生态（GSD 工作流等按需选装）。
 
 ```bash
 # 国内网络优先走镜像（gh-proxy.com → ghfast.top → 官方直连 自动回退）
@@ -31,7 +31,7 @@ cd opencode-setup
 - **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
 - **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
 - **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 清华 PyPI 源
-- **GSD Core 工作流** — 项目全生命周期管理（官方继任项目，原生支持 OpenCode）
+- **GSD Core 工作流（选装）** — 项目全生命周期管理；默认不装（实测零完成率收益、~4k tok/会话常驻成本），`INSTALL_GSD=1` 启用
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
 
@@ -43,8 +43,7 @@ cd opencode-setup
 ├── oh-my-openagent.json    ←  Agent 模型路由
 ├── node_modules/           ←  oh-my-openagent + superpowers 插件
 ├── plugins/                ←  rtk.ts（命令输出压缩）
-├── command/                ←  GSD Core 命令（/gsd-* 斜杠命令）
-├── agents/                 ←  GSD Core 子 Agent
+├── command/                ←  GSD Core 命令（INSTALL_GSD=1 时存在）
 ├── skills/                 ←  技能链接库
 ├── AGENT-CARD.md           ←  Agent 环境披露（步骤 12 生成）
 ├── compliance/             ←  合规文档 CN/EU（步骤 12 生成）
