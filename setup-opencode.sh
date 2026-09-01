@@ -139,15 +139,13 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ]; then
     SP_PLUGIN_LINE=''
   else
-    SP_PLUGIN_LINE='    "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git",'
+    SP_PLUGIN_LINE=', "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git"'
   fi
   cat > "$CONFIG_DIR/opencode.json" << EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "model": "zhipuai-coding-plan/glm-5.3",
-  "plugin": [
-    "oh-my-openagent@latest",$SP_PLUGIN_LINE
-  ],
+  "plugin": ["oh-my-openagent@latest"$SP_PLUGIN_LINE],
   "permission": {
     "read": {
       "~/.config/opencode/*": "allow",
@@ -160,7 +158,13 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   }
 }
 EOF
-  echo -e "${GREEN}  ✓ opencode.json${NC}"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json; c=json.load(open('$CONFIG_DIR/opencode.json')); assert c.get('model') and c.get('plugin'), 'model/plugin 丢失'" \
+      && echo -e "${GREEN}  ✓ opencode.json(含 model+plugin,JSON 已校验)${NC}" \
+      || { echo -e "${RED}  ✗ opencode.json 生成损坏(JSON 非法或 model/plugin 丢失),中止——静默损坏曾致 403${NC}"; exit 1; }
+  else
+    echo -e "${YELLOW}  ⚠ 无 python3,跳过 JSON 校验(建议安装后重跑)${NC}"
+  fi
 
   # oh-my-openagent.json
   # 显式 model 必须存在:fallbackChain patch 盖不住 category 解析路径,空配置会
@@ -667,6 +671,7 @@ if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && [ -f "$SCRIPT_DIR/router-modules/sp-r
       && echo -e "${GREEN}✓ superpowers vault 已克隆(路由模式)${NC}" \
       || echo -e "${YELLOW}⚠ vault 克隆失败,sp-router 将无技能可读${NC}"
   fi
+  mkdir -p "$CONFIG_DIR/plugins"
   sed "s|__SP_VAULT__|$SP_VAULT/skills|g" "$SCRIPT_DIR/router-modules/sp-router/plugin.js" > "$CONFIG_DIR/plugins/sp-router.ts"
   echo -e "${GREEN}✓ sp-router 已部署 → plugins/sp-router.ts(渐进披露,实测 -90% 起步 token)${NC}"
 fi
@@ -925,6 +930,7 @@ PYEOF
   # ④ 合规文档
   "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
 
+  mkdir -p "$CONFIG_DIR/plugins"
   # ④b A-webmap 部署(联网认知 CLI, 装 ~/.local/bin)
   if [ -f "$SCRIPT_DIR/a-modules/webmap" ]; then
     mkdir -p "$HOME/.local/bin"
