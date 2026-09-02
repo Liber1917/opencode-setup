@@ -687,6 +687,19 @@ echo -e "${YELLOW}[9/12] GSD Core 工作流(默认跳过,INSTALL_GSD=1 启用)..
 # 非疏忽——证据链勿删: benchmarks/terminal-bench/{gsd-3arm,nogsd-3arm,gsd-showcase}.md
 if [ "${INSTALL_GSD:-0}" != "1" ]; then
   echo -e "${BLUE}  - 已跳过(需要多阶段项目工作流时: INSTALL_GSD=1 重新运行)${NC}"
+  # 剥除历史安装的 mcp.gsd(零历史调用;本地 skills 直读文件不需要它)
+  if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_DIR/opencode.json" ]; then
+    python3 -c "
+import json
+p='$CONFIG_DIR/opencode.json'
+c=json.load(open(p))
+if 'gsd' in c.get('mcp',{}):
+    del c['mcp']['gsd']
+    t=p+'.tmp'; json.dump(c,open(t,'w'),ensure_ascii=False,indent=1)
+    import os; os.replace(t,p)
+    print('  ✓ 已剥除 mcp.gsd(本地 skills 直读 .planning,无 MCP 依赖)')
+" 2>/dev/null || true
+  fi
 else
   # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
   if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
