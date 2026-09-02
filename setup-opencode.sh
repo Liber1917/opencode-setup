@@ -246,7 +246,7 @@ else
       echo -e "${BLUE}  测速中 (发行版 $APT_CODENAME)...${NC}"
       BEST_MIRROR=""
       BEST_SPEED=0
-      for M in mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn mirrors.huaweicloud.com mirrors.cloud.tencent.com mirrors.163.com archive.ubuntu.com; do
+      for M in mirrors.ustc.edu.cn mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.huaweicloud.com mirrors.cloud.tencent.com mirrors.163.com archive.ubuntu.com; do
         # 单次下载测速（速度取两次采样最大值，避免抖动）
         SPEED=0
         for _ in 1 2; do
@@ -396,7 +396,7 @@ else
   echo -e "${BLUE}  - ~/.npmrc 已有 registry 配置，跳过${NC}"
 fi
 
-# Python 生态: 无 pip 则用 ensurepip 引导, pip 可用时才配置清华 PyPI 镜像
+# Python 生态: 无 pip 则用 ensurepip 引导, pip 可用时才配置中科大 PyPI 镜像
 if command -v python3 &> /dev/null; then
   PIP_READY=0
   if python3 -m pip --version &> /dev/null; then
@@ -418,8 +418,8 @@ if command -v python3 &> /dev/null; then
     fi
     if ! grep -q "index-url" "$PIP_CONF" 2>/dev/null; then
       mkdir -p "$(dirname "$PIP_CONF")"
-      printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > "$PIP_CONF"
-      echo -e "${GREEN}✓ PyPI 镜像源已配置 (清华, $PIP_CONF)${NC}"
+      printf '[global]\nindex-url = https://mirrors.ustc.edu.cn/pypi/simple\ntrusted-host = mirrors.ustc.edu.cn\n' > "$PIP_CONF"
+      echo -e "${GREEN}✓ PyPI 镜像源已配置 (中科大, $PIP_CONF)${NC}"
     else
       echo -e "${BLUE}  - pip 已有 index-url 配置，跳过${NC}"
     fi

@@ -30,7 +30,7 @@ cd opencode-setup
 - **子代理模型显式路由** — oh-my-openagent.json 为全部 10 agent + 8 category 写显式 model（堵死内置回退链的 claude 路由 403；`OMO_MODEL=<provider/model>` 可换），另有 fallbackChain 补丁双保险
 - **RTK 命令输出压缩** — 安装 [Rust Token Killer](https://github.com/rtk-ai/rtk) 并集成 OpenCode 插件，bash 命令输出进 LLM 前被智能压缩，节省 60-90% Token（零认证镜像源下载，国内网络友好）
 - **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
-- **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 清华 PyPI 源
+- **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 中科大 PyPI 源
 - **GSD Core 工作流（选装）** — 项目全生命周期管理；默认不装（实测零完成率收益、~4k tok/会话常驻成本），`INSTALL_GSD=1` 启用
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
@@ -92,7 +92,7 @@ export NPM_REGISTRY=https://registry.npmjs.org
 
 脚本不会覆盖已有的 `~/.npmrc` 和 `~/.bunfig.toml` 中的 registry 配置。pip 同样不覆盖已有 `index-url` 的配置。
 
-node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则提示手动安装，不写入配置），仅当 pip 可用时才写入清华 PyPI 源（`~/.config/pip/pip.conf`，兼容 `~/.pip/pip.conf`）。
+node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则提示手动安装，不写入配置），仅当 pip 可用时才写入中科大 PyPI 源（`~/.config/pip/pip.conf`，兼容 `~/.pip/pip.conf`）。
 
 ### apt 源优化控制
 
