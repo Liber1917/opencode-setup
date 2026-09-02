@@ -687,6 +687,7 @@ echo -e "${YELLOW}[9/12] GSD Core 工作流(默认跳过,INSTALL_GSD=1 启用)..
 # 非疏忽——证据链勿删: benchmarks/terminal-bench/{gsd-3arm,nogsd-3arm,gsd-showcase}.md
 if [ "${INSTALL_GSD:-0}" != "1" ]; then
   echo -e "${BLUE}  - 已跳过(需要多阶段项目工作流时: INSTALL_GSD=1 重新运行)${NC}"
+  echo -e "${BLUE}  - 安全钩子层(hooks/ gsd-prompt-guard 等)保留——它是注入防线,与工作流无关${NC}"
   # 剥除历史安装的 mcp.gsd(零历史调用;本地 skills 直读文件不需要它)
   if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_DIR/opencode.json" ]; then
     python3 -c "
@@ -714,6 +715,12 @@ else
       npx --yes @opengsd/gsd-core@latest --opencode --global
 
       echo ""
+      # 安全钩子防线校验(2026-09-01 教训: hooks/ 是注入防线,误删=S1 裸奔)
+      if ls "$CONFIG_DIR/hooks/gsd-prompt-guard.js" "$CONFIG_DIR/hooks/gsd-read-guard.js" >/dev/null 2>&1; then
+        echo -e "${GREEN}  ✓ GSD 安全钩子在位(prompt-guard/read-guard/injection-scanner)${NC}"
+      else
+        echo -e "${YELLOW}  ⚠ 安全钩子未检测到——检查 hooks/ 目录,勿在无防护下运行对抗场景${NC}"
+      fi
       echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
       echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令(用户显式驱动;env 块会注入项目状态)${NC}"
     else
