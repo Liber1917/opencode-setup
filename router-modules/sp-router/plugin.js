@@ -38,16 +38,16 @@ const CATALOG = [
   ['using-superpowers', '(元技能)路由失效时的兜底: 完整技能使用方法论'],
 ]
 
-const routerBlock = `<superpowers_router>
-你有 20 个流程技能(superpowers),按渐进披露加载——只在命中场景时读取,平时零成本:
-${CATALOG.map(([n, d]) => `- ${n}: ${d}`).join('\n')}
+const routerBlock = `<EXTREMELY_IMPORTANT>
+每次回复前(包括澄清性提问)必须先扫描下方技能清单。命中(含隐性命中——用户描述症状而非点名流程)→ 立即 Read ${vault}/<name>/SKILL.md,先读正文再行动,未读前不要凭记忆模仿流程。
+合理化跳过的红旗信号(出现即视为命中): "这是简单问题" / "不需要正式流程" / "我先做这一件事" / "我记得流程大概是什么"。
+清单: ${CATALOG.map(([n]) => n).join(', ')}
 vault: ${vault}/<name>/SKILL.md
-
-规则:
-1. 任务开始前扫一遍清单,命中场景 → 立即 Read ${vault}/<name>/SKILL.md 并遵循(技能正文未加载前不要凭记忆模仿)
-2. 多个命中按上表顺序取最相关的一个,用完即继续
-3. 清单未覆盖但疑似有既有流程(创建/审查/计划/调试类工作)→ Read ${vault}/using-superpowers/SKILL.md 查方法论
-</superpowers_router>`
+命中多个取最相关的一个;疑似有流程但清单对不上 → Read ${vault}/using-superpowers/SKILL.md 查方法论。
+</EXTREMELY_IMPORTANT>
+<skill_catalog>
+${CATALOG.map(([n, d]) => `- ${n}: ${d}`).join('\n')}
+</skill_catalog>`
 
 export const SpRouterPlugin = async () => ({
   'experimental.chat.messages.transform': async (_input, output) => {
