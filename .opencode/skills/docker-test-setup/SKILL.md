@@ -15,17 +15,19 @@ description: 用 Docker 容器矩阵测试 setup-opencode.sh（干净环境全�
 cd opencode-setup
 docker pull ubuntu:22.04 ubuntu:24.04
 
-# 1. 全流程(22.04 传统 sources.list): 必须退出码 0, 11 步全完成
-docker run --rm -v "$PWD/setup-opencode.sh:/setup.sh" ubuntu:22.04 bash /setup.sh
+# 1. 全流程(24.04 deb822 + 自带 python3,含步骤12): 必须退出码 0, 12 步全完成
+#    ⚠ 挂载整个仓库(不只脚本)——步骤12 安全模块随仓库分发,只挂脚本会静默跳过
+docker run --rm -v "$PWD:/repo" ubuntu:24.04 bash -c "apt-get update -qq >/dev/null && apt-get install -y -qq curl git python3 >/dev/null && bash /repo/setup-opencode.sh"
 
-# 2. deb822(24.04 ubuntu.sources 格式): 必须退出码 0
-docker run --rm -v "$PWD/setup-opencode.sh:/setup.sh" ubuntu:24.04 bash /setup.sh
+# 2. 22.04(传统 sources.list, 需先装 python3): 必须退出码 0
+docker run --rm -v "$PWD:/repo" ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y -qq python3 && bash /repo/setup-opencode.sh"
 
 # 3. 断网降级: 不崩溃, 优雅失败 + 计时汇总
-docker run --rm --network none -v "$PWD/setup-opencode.sh:/setup.sh" ubuntu:22.04 bash /setup.sh
+docker run --rm --network none -v "$PWD:/repo" ubuntu:24.04 bash -c "apt-get update -qq >/dev/null && apt-get install -y -qq curl git python3 >/dev/null && bash /repo/setup-opencode.sh"
 
 # 4. 幂等: 同一容器跑两次, 第二次也退出码 0
-docker run --name setup-test -v "$PWD/setup-opencode.sh:/setup.sh" ubuntu:22.04 bash /setup.sh
+docker run --name setup-test -v "$PWD:/repo" ubuntu:24.04 bash /c "bash /repo/setup-opencode.sh" \
+  && docker start -ai setup-test; docker rm -f setup-test
 docker start -ai setup-test
 docker rm setup-test
 ```
@@ -37,7 +39,7 @@ docker rm setup-test
 跑完后检查(容器内或日志):
 
 1. **退出码 0**(全流程/幂等);断网场景允许非 0 但必须有汇总表
-2. **汇总表 11 步齐全**(计时功能):`=== 各环节耗时 ===` 出现 11 行
+2. **汇总表 12 步齐全**(计时功能):`=== 各环节耗时 ===` 出现 11 行
 3. **codegraph 注册为绝对路径**:
    ```bash
    node -e 'const c=JSON.parse(require("fs").readFileSync("/root/.config/opencode/opencode.json")); console.log(JSON.stringify(c.mcp.codegraph))'
@@ -46,6 +48,23 @@ docker rm setup-test
 4. **opencode.json 无 anthropic provider**:`grep -c anthropic` = 0
 5. **node/bun 实际可用**:`node --version`、`bun --version` 有输出
 6. 关键产物存在:`/usr/local/bin/node`、`~/.bun/bin/bun`、`/usr/local/bin/opencode`
+7. **步骤 12 产物**(PR #2 核心,挂仓库才有):
+   ```bash
+   docker run --rm -v "$PWD:/repo" ubuntu:24.04 bash -c '
+     bash /repo/setup-opencode.sh >/dev/null 2>&1 || { echo "FAIL:exit=$?"; exit 1; }
+     C=/root/.config/opencode
+     python3 - <<PY
+import json
+c=json.load(open("/root/.config/opencode/opencode.json"))
+b=c["permission"]["bash"]
+print("bash规则:",len(b),"deny:",sum(1 for v in b.values() if v=="deny"))
+print("event:",list(c.get("event",{}).keys()))
+print("插件:",c.get("plugin"))
+PY
+     ls $C/AGENT-CARD.md $C/compliance/COMPLIANCE.md $C/opencode-setup-modules/gen-permissions.sh \
+        /root/.local/bin/webmap /root/.local/bin/opstate >/dev/null && echo "✓ 步骤12 全产物在位"
+     stat -c "%a" $C/self-portrait.json'   # 期望 600
+   ```
 
 ## 排障经验(血泪史)
 

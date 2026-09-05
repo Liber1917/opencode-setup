@@ -11,6 +11,14 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 set -e
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APT_UPDATED=0   # 确保 apt install 前 lists 就绪(全新容器/镜像跳过测速时仍可装包)
+apt_ensure_update() {
+  [ "$APT_UPDATED" = 1 ] && return 0
+  command -v apt-get >/dev/null 2>&1 || return 0
+  $SUDO apt-get update -qq >/dev/null 2>&1 || true
+  APT_UPDATED=1
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -34,9 +42,9 @@ step_summary() {
   local i total=0
   echo ""
   echo -e "${YELLOW}=== 各环节耗时 ===${NC}"
-  for i in $(seq 1 11); do
+  for i in $(seq 1 12); do
     [ -z "${STEP_TIMES[$i]:-}" ] && continue
-    printf "  [%s/11] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
+    printf "  [%s/12] %s: %ss\n" "$i" "${STEP_NAMES[$i]}" "${STEP_TIMES[$i]}"
     total=$(( total + STEP_TIMES[$i] ))
   done
   echo -e "${YELLOW}总耗时: ${total}s${NC}"
@@ -79,14 +87,19 @@ fi
 # ------------------------------------------------------------------
 # 步骤 1: 检测已有配置
 # ------------------------------------------------------------------
-echo -e "${YELLOW}[1/11] 检测已有配置...${NC}"
+echo -e "${YELLOW}[1/12] 检测已有配置...${NC}"
 step_begin
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
-  echo -n "是否备份后重新生成? (y/n) [n]: "
-  read -r overwrite
-  overwrite=${overwrite:-n}
+  if [ -t 0 ]; then
+    echo -n "是否备份后重新生成? (y/n) [n]: "
+    read -r overwrite
+    overwrite=${overwrite:-n}
+  else
+    overwrite=n  # U-10: 管道安装(非交互)默认不覆盖,防 read 吞脚本后续行
+    echo -e "${YELLOW}  非交互模式: 保留现有配置${NC}"
+  fi
   if [[ $overwrite =~ ^[Yy]$ ]]; then
     backup_dir="$HOME/opencode-backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$backup_dir"
@@ -105,7 +118,7 @@ fi
 # ------------------------------------------------------------------
 step_end 1 "检测已有配置"
 step_begin
-echo -e "${YELLOW}[2/11] 创建配置目录...${NC}"
+echo -e "${YELLOW}[2/12] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/skills"
 mkdir -p "$CLAUDE_DIR"
@@ -117,16 +130,22 @@ echo -e "${GREEN}✓ 目录已创建${NC}"
 step_end 2 "创建配置目录"
 if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   step_begin
-  echo -e "${YELLOW}[3/11] 生成配置文件...${NC}"
+  echo -e "${YELLOW}[3/12] 生成配置文件...${NC}"
 
   # opencode.json
+  # superpowers 接入方式: 官方急加载(默认) 或 路由模式(渐进披露,-90% token)
+  # 注意: 本地插件(sp-router/opencode-env)不进 plugin 数组——数组只认 npm 包,
+  # 本地文件靠 ~/.config/opencode/plugins/*.ts 自动发现(rtk.ts 同款姿势)
+  if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ]; then
+    SP_PLUGIN_LINE=''
+  else
+    SP_PLUGIN_LINE=', "superpowers@git+https://github.com/jnMetaCode/superpowers-zh.git"'
+  fi
   cat > "$CONFIG_DIR/opencode.json" << EOF
 {
   "\$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "oh-my-openagent@latest",
-    "superpowers@git+https://github.com/obra/superpowers.git"
-  ],
+  "model": "zhipuai-coding-plan/glm-5.3",
+  "plugin": ["oh-my-openagent@latest"$SP_PLUGIN_LINE],
   "permission": {
     "read": {
       "~/.config/opencode/*": "allow",
@@ -139,39 +158,47 @@ if [ "${SKIP_CONFIG:-0}" != "1" ]; then
   }
 }
 EOF
-  echo -e "${GREEN}  ✓ opencode.json${NC}"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json; c=json.load(open('$CONFIG_DIR/opencode.json')); assert c.get('model') and c.get('plugin'), 'model/plugin 丢失'" \
+      && echo -e "${GREEN}  ✓ opencode.json(含 model+plugin,JSON 已校验)${NC}" \
+      || { echo -e "${RED}  ✗ opencode.json 生成损坏(JSON 非法或 model/plugin 丢失),中止——静默损坏曾致 403${NC}"; exit 1; }
+  else
+    echo -e "${YELLOW}  ⚠ 无 python3,跳过 JSON 校验(建议安装后重跑)${NC}"
+  fi
 
   # oh-my-openagent.json
-  # 只注册 agent/category 结构，不设 model = 使用源码内置默认模型 + 回退链
-  # 需要自定义时取消注释或添加 model 字段
-  cat > "$CONFIG_DIR/oh-my-openagent.json" << 'EOF'
+  # 显式 model 必须存在:fallbackChain patch 盖不住 category 解析路径,空配置会
+  # 落到源码内置链(anthropic)→ 子代理 403 静默死(2026-08-30 实测坐实)。
+  # 换模型: OMO_MODEL=<provider/model> 重跑,或直接编辑本文件。
+  OMO_MODEL="${OMO_MODEL:-zhipuai-coding-plan/glm-5.3}"
+  cat > "$CONFIG_DIR/oh-my-openagent.json" << EOF
 {
-  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "\$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
   "agents": {
-    "hephaestus": {},
-    "oracle": {},
-    "librarian": {},
-    "explore": {},
-    "multimodal-looker": {},
-    "prometheus": {},
-    "metis": {},
-    "momus": {},
-    "atlas": {},
-    "sisyphus-junior": {}
+    "hephaestus": {"model": "$OMO_MODEL"},
+    "oracle": {"model": "$OMO_MODEL"},
+    "librarian": {"model": "$OMO_MODEL"},
+    "explore": {"model": "$OMO_MODEL"},
+    "multimodal-looker": {"model": "$OMO_MODEL"},
+    "prometheus": {"model": "$OMO_MODEL"},
+    "metis": {"model": "$OMO_MODEL"},
+    "momus": {"model": "$OMO_MODEL"},
+    "atlas": {"model": "$OMO_MODEL"},
+    "sisyphus-junior": {"model": "$OMO_MODEL"}
   },
   "categories": {
-    "visual-engineering": {},
-    "ultrabrain": {},
-    "deep": {},
-    "artistry": {},
-    "quick": {},
-    "unspecified-low": {},
-    "unspecified-high": {},
-    "writing": {}
+    "visual-engineering": {"model": "$OMO_MODEL"},
+    "ultrabrain": {"model": "$OMO_MODEL"},
+    "deep": {"model": "$OMO_MODEL"},
+    "artistry": {"model": "$OMO_MODEL"},
+    "quick": {"model": "$OMO_MODEL"},
+    "unspecified-low": {"model": "$OMO_MODEL"},
+    "unspecified-high": {"model": "$OMO_MODEL"},
+    "writing": {"model": "$OMO_MODEL"}
   }
 }
 EOF
-  echo -e "${GREEN}  ✓ oh-my-openagent.json（agent 已注册，model 留空=内置默认）${NC}"
+  echo -e "${GREEN}  ✓ oh-my-openagent.json（agents+categories 显式 model=$OMO_MODEL，堵死回退链路由）${NC}"
 
   # Claude settings
   if [ ! -f "$CLAUDE_DIR/settings.json" ]; then
@@ -195,7 +222,7 @@ fi
 # 步骤 4: apt 源测速优化（仅 apt 系系统；官方最快则不动，已自定义则跳过）
 # ------------------------------------------------------------------
 step_begin
-echo -e "${YELLOW}[4/11] apt 源测速优化...${NC}"
+echo -e "${YELLOW}[4/12] apt 源测速优化...${NC}"
 
 if ! command -v apt-get &> /dev/null || [ "$SKIP_APT_MIRROR" = "1" ]; then
   echo -e "${BLUE}  - 非 apt 系统或已跳过（SKIP_APT_MIRROR=1），跳过源优化${NC}"
@@ -219,7 +246,7 @@ else
       echo -e "${BLUE}  测速中 (发行版 $APT_CODENAME)...${NC}"
       BEST_MIRROR=""
       BEST_SPEED=0
-      for M in mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn mirrors.huaweicloud.com mirrors.cloud.tencent.com mirrors.163.com archive.ubuntu.com; do
+      for M in mirrors.ustc.edu.cn mirrors.aliyun.com mirrors.tuna.tsinghua.edu.cn mirrors.huaweicloud.com mirrors.cloud.tencent.com mirrors.163.com archive.ubuntu.com; do
         # 单次下载测速（速度取两次采样最大值，避免抖动）
         SPEED=0
         for _ in 1 2; do
@@ -250,7 +277,7 @@ else
           if $SUDO apt-get update >/dev/null 2>&1; then
             echo -e "${GREEN}✓ apt update 验证通过${NC}"
           else
-            echo -e "${YELLOW}⚠ apt update 失败，还原原源: sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
+            echo -e "${YELLOW}⚠ apt update 失败，请手动还原(命令): sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
           fi
         fi
       else
@@ -267,12 +294,13 @@ fi
 # ------------------------------------------------------------------
 step_end 4 "apt 源测速优化"
 step_begin
-echo -e "${YELLOW}[5/11] 检查前置依赖...${NC}"
+echo -e "${YELLOW}[5/12] 检查前置依赖...${NC}"
 
 # Bun 安装脚本需要 unzip
 if ! command -v unzip &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
   if command -v apt-get &> /dev/null; then
+    apt_ensure_update
     $SUDO apt-get install -y unzip
   elif command -v yum &> /dev/null; then
     $SUDO yum install -y unzip
@@ -336,6 +364,7 @@ if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}npmmirror 下载失败，回退系统包管理器...${NC}"
     if command -v apt-get &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
+      apt_ensure_update
       $SUDO apt-get install -y nodejs
     elif command -v yum &> /dev/null; then
       curl -fsSL https://rpm.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
@@ -367,7 +396,7 @@ else
   echo -e "${BLUE}  - ~/.npmrc 已有 registry 配置，跳过${NC}"
 fi
 
-# Python 生态: 无 pip 则用 ensurepip 引导, pip 可用时才配置清华 PyPI 镜像
+# Python 生态: 无 pip 则用 ensurepip 引导, pip 可用时才配置中科大 PyPI 镜像
 if command -v python3 &> /dev/null; then
   PIP_READY=0
   if python3 -m pip --version &> /dev/null; then
@@ -389,8 +418,8 @@ if command -v python3 &> /dev/null; then
     fi
     if ! grep -q "index-url" "$PIP_CONF" 2>/dev/null; then
       mkdir -p "$(dirname "$PIP_CONF")"
-      printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > "$PIP_CONF"
-      echo -e "${GREEN}✓ PyPI 镜像源已配置 (清华, $PIP_CONF)${NC}"
+      printf '[global]\nindex-url = https://mirrors.ustc.edu.cn/pypi/simple\ntrusted-host = mirrors.ustc.edu.cn\n' > "$PIP_CONF"
+      echo -e "${GREEN}✓ PyPI 镜像源已配置 (中科大, $PIP_CONF)${NC}"
     else
       echo -e "${BLUE}  - pip 已有 index-url 配置，跳过${NC}"
     fi
@@ -402,7 +431,7 @@ fi
 # ------------------------------------------------------------------
 step_end 5 "检查前置依赖"
 step_begin
-echo -e "${YELLOW}[6/11] 安装 Bun 运行时...${NC}"
+echo -e "${YELLOW}[6/12] 安装 Bun 运行时...${NC}"
 
 ensure_bun() {
   local bun_cmd=""
@@ -496,7 +525,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 # ------------------------------------------------------------------
 step_end 6 "安装 Bun 运行时"
 step_begin
-echo -e "${YELLOW}[7/11] 安装 OpenCode...${NC}"
+echo -e "${YELLOW}[7/12] 安装 OpenCode...${NC}"
 
 # 确保 Bun 路径优先（避免 WSL 下 Windows npm 版本抢在前）
 export PATH="$HOME/.bun/bin:$PATH"
@@ -529,7 +558,7 @@ fi
 # ------------------------------------------------------------------
 step_end 7 "安装 OpenCode"
 step_begin
-echo -e "${YELLOW}[8/11] 安装 oh-my-openagent 插件...${NC}"
+echo -e "${YELLOW}[8/12] 安装 oh-my-openagent 插件...${NC}"
 
 cd "$CONFIG_DIR"
 if [ ! -d "node_modules" ] || [ ! -d "node_modules/oh-my-openagent" ]; then
@@ -619,34 +648,88 @@ if [ -f "$CONFIG_DIR/node_modules/oh-my-openagent/dist/index.js" ] && node "$OMO
 else
   echo -e "${YELLOW}⚠ omo 补丁失败（omo 版本可能已变化，子代理将回退硬编码模型链）${NC}"
 fi
+# 运行时副本: opencode 实际从 ~/.cache/opencode/packages/ 加载插件,该副本不打=补丁运行时无效
+CACHE_OKO=0
+for RT in "$HOME/.cache/opencode/packages/oh-my-openagent@"*/node_modules/oh-my-openagent/dist/index.js; do
+  [ -f "$RT" ] || continue
+  if node "$OMO_PATCH_FILE" "$RT"; then CACHE_OKO=1; fi
+done
+if [ "$CACHE_OKO" = 1 ]; then
+  echo -e "${GREEN}✓ omo 运行时副本补丁已应用（~/.cache/opencode/packages/）${NC}"
+else
+  echo -e "${BLUE}  - 运行时副本未找到（首次启动 opencode 后才生成,届时重跑本脚本补打）${NC}"
+fi
 rm -f "$OMO_PATCH_FILE"
+
+# superpowers 路由模式: clone vault + 部署轻插件(默认关闭, SUPERPOWERS_ROUTER=1 启用)
+if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && [ -f "$SCRIPT_DIR/router-modules/sp-router/plugin.js" ]; then
+  SP_VAULT="$CONFIG_DIR/sp-vault/superpowers"
+  if [ -d "$SP_VAULT/.git" ]; then
+    git -C "$SP_VAULT" pull --ff-only >/dev/null 2>&1 || echo -e "${BLUE}  - sp-vault 更新跳过(可手动 git pull)${NC}"
+  else
+    git clone --depth 1 https://github.com/jnMetaCode/superpowers-zh.git "$SP_VAULT" >/dev/null 2>&1 \
+      && echo -e "${GREEN}✓ superpowers vault 已克隆(路由模式)${NC}" \
+      || echo -e "${YELLOW}⚠ vault 克隆失败,sp-router 将无技能可读${NC}"
+  fi
+  mkdir -p "$CONFIG_DIR/plugins"
+  sed "s|__SP_VAULT__|$SP_VAULT/skills|g" "$SCRIPT_DIR/router-modules/sp-router/plugin.js" > "$CONFIG_DIR/plugins/sp-router.ts"
+  echo -e "${GREEN}✓ sp-router 已部署 → plugins/sp-router.ts(渐进披露,实测 -90% 起步 token)${NC}"
+fi
 
 # ------------------------------------------------------------------
 # 步骤 9: 安装 GSD Core 工作流
 # ------------------------------------------------------------------
 step_end 8 "安装 oh-my-openagent 插件"
 step_begin
-echo -e "${YELLOW}[9/11] 安装 GSD Core 工作流...${NC}"
+echo -e "${YELLOW}[9/12] GSD Core 工作流(默认跳过,INSTALL_GSD=1 启用)...${NC}"
 
-# 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
-if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
-  echo -e "${GREEN}✓ GSD Core 命令已存在${NC}"
+# GSD 默认跳过是基准实测定案(完成率零收益/常驻 ~4k tok/模型自发调用 0%),
+# 非疏忽——证据链勿删: benchmarks/terminal-bench/{gsd-3arm,nogsd-3arm,gsd-showcase}.md
+if [ "${INSTALL_GSD:-0}" != "1" ]; then
+  echo -e "${BLUE}  - 已跳过(需要多阶段项目工作流时: INSTALL_GSD=1 重新运行)${NC}"
+  # 锚点耦合警告: plugins/gsd-core.js 的 resolveRepoRoot 需要 gsd-core/ 目录做锚点,
+  # 单删 gsd-core/ 会让钩子桥报 "NOT enforced"(安全钩子静默失效)。只剥 skills/agents,保 gsd-core/+hooks/
+  echo -e "${BLUE}  - 安全钩子层(hooks/ gsd-prompt-guard 等)保留——它是注入防线,与工作流无关${NC}"
+  # 剥除历史安装的 mcp.gsd(零历史调用;本地 skills 直读文件不需要它)
+  if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_DIR/opencode.json" ]; then
+    python3 -c "
+import json
+p='$CONFIG_DIR/opencode.json'
+c=json.load(open(p))
+if 'gsd' in c.get('mcp',{}):
+    del c['mcp']['gsd']
+    t=p+'.tmp'; json.dump(c,open(t,'w'),ensure_ascii=False,indent=1)
+    import os; os.replace(t,p)
+    print('  ✓ 已剥除 mcp.gsd(本地 skills 直读 .planning,无 MCP 依赖)')
+" 2>/dev/null || true
+  fi
 else
-  if command -v npx &> /dev/null; then
-    echo "正在安装 GSD Core（官方继任项目，原生支持 OpenCode）..."
-    echo ""
-
-    # GSD Core 官方安装命令
-    # 自动检测 OpenCode 配置目录，安装 agent 和 command 到对应位置
-    npx --yes @opengsd/gsd-core@latest --opencode --global
-
-    echo ""
-    echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
-    echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令${NC}"
+  # 检测是否已安装（检查 opencode 命令行目录下是否有 gsd 命令）
+  if ls "$CONFIG_DIR/command/gsd-"* &>/dev/null 2>&1; then
+    echo -e "${GREEN}✓ GSD Core 命令已存在${NC}"
   else
-    echo -e "${YELLOW}⚠ npx 未安装，跳过 GSD Core${NC}"
-    echo "  确保 Node.js 已安装，然后手动执行:"
-    echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
+    if command -v npx &> /dev/null; then
+      echo "正在安装 GSD Core（官方继任项目，原生支持 OpenCode）..."
+      echo ""
+
+      # GSD Core 官方安装命令
+      # 自动检测 OpenCode 配置目录，安装 agent 和 command 到对应目录
+      npx --yes @opengsd/gsd-core@latest --opencode --global
+
+      echo ""
+      # 安全钩子防线校验(2026-09-01 教训: hooks/ 是注入防线,误删=S1 裸奔)
+      if ls "$CONFIG_DIR/hooks/gsd-prompt-guard.js" "$CONFIG_DIR/hooks/gsd-read-guard.js" >/dev/null 2>&1; then
+        echo -e "${GREEN}  ✓ GSD 安全钩子在位(prompt-guard/read-guard/injection-scanner)${NC}"
+      else
+        echo -e "${YELLOW}  ⚠ 安全钩子未检测到——检查 hooks/ 目录,勿在无防护下运行对抗场景${NC}"
+      fi
+      echo -e "${GREEN}✓ GSD Core 安装完成${NC}"
+      echo -e "${BLUE}  重启 OpenCode 后即可使用 /gsd-* 命令(用户显式驱动;env 块会注入项目状态)${NC}"
+    else
+      echo -e "${YELLOW}⚠ npx 未安装，跳过 GSD Core${NC}"
+      echo "  确保 Node.js 已安装，然后手动执行:"
+      echo "    npx --yes @opengsd/gsd-core@latest --opencode --global"
+    fi
   fi
 fi
 
@@ -655,7 +738,7 @@ fi
 # ------------------------------------------------------------------
 step_end 9 "安装 GSD Core 工作流"
 step_begin
-echo -e "${YELLOW}[10/11] 安装 CodeGraph MCP...${NC}"
+echo -e "${YELLOW}[10/12] 安装 CodeGraph MCP...${NC}"
 
 CG_BIN="$(command -v codegraph 2>/dev/null || true)"
 if [ -z "$CG_BIN" ]; then
@@ -723,7 +806,7 @@ echo -e "${BLUE}  重启 OpenCode 后 codegraph_* 工具生效${NC}"
 # ------------------------------------------------------------------
 step_end 10 "安装 CodeGraph MCP"
 step_begin
-echo -e "${YELLOW}[11/11] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
+echo -e "${YELLOW}[11/12] 安装 RTK（命令输出压缩，节省 Token 开支）...${NC}"
 
 if command -v rtk &> /dev/null; then
   echo -e "${GREEN}✓ rtk 已安装 ($(rtk --version))${NC}"
@@ -785,11 +868,168 @@ if command -v rtk &> /dev/null; then
   rtk telemetry disable >/dev/null 2>&1 || true
 fi
 
-# 让当前终端也能用 Bun（.bashrc 刚写入的 PATH）
-# shellcheck source=/dev/null
-. "$HOME/.bashrc" 2>/dev/null || true
 
 step_end 11 "安装 RTK"
+
+# ------------------------------------------------------------------
+# 步骤 12: 安全/能力增强模块(可选, SKIP_SECURITY=1 跳过)
+# 依据 spec: E 方向六模块(权限红线/审计/安全自检/合规) + B 方向环境画像
+# e-modules/ 随仓库分发, 安装时部署到 CONFIG_DIR
+# ------------------------------------------------------------------
+step_begin
+echo -e "${YELLOW}[12/12] 安全与能力增强模块...${NC}"
+
+MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
+PERM_TMP=$(mktemp)
+_prev_trap() { step_summary; rm -f "$PERM_TMP" 2>/dev/null || true; }
+trap _prev_trap EXIT
+
+if [ "$SKIP_SECURITY" = "1" ]; then
+  echo -e "${BLUE}  - 已跳过（SKIP_SECURITY=1）${NC}"
+elif [ -d "$SCRIPT_DIR/e-modules" ]; then
+  # 部署 e-modules 到配置目录
+  mkdir -p "$MOD_DIR" "$MOD_DIR/devcontainer"
+  cp "$SCRIPT_DIR/e-modules/"*.sh "$MOD_DIR/" 2>/dev/null
+  cp "$SCRIPT_DIR/e-modules/devcontainer/"*.json "$SCRIPT_DIR/e-modules/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
+  chmod +x "$MOD_DIR"/*.sh 2>/dev/null
+
+  echo -e "${BLUE}  - e-modules 已部署到 $MOD_DIR${NC}"
+
+  export PERM_TMP
+  # ① 权限红线(merge 进 opencode.json 的 permission 段)
+  if command -v python3 >/dev/null 2>&1; then
+    MERGE_OUT=$("$MOD_DIR/gen-permissions.sh" "$PERM_TMP" >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" "$PERM_TMP" << 'PYEOF'
+import json,sys
+p, perm_file = sys.argv[1], sys.argv[2]
+try:
+    c = json.load(open(p))
+except Exception:
+    c = {"$schema": "https://opencode.ai/config.json"}
+try:
+    perm = json.load(open(perm_file))["permission"]
+    merged = c.get("permission", {})
+    for cat, rules in perm.items():
+        if isinstance(rules, dict):
+            base = merged.get(cat, {})
+            if isinstance(base, str):
+                base = {} if rules else base
+            for k, v in rules.items():
+                # deny 不可被既有 allow 稀释;其余新规则覆盖
+                if v == "deny" or k not in base:
+                    base[k] = v
+            merged[cat] = base
+        else:
+            merged[cat] = rules
+    c["permission"] = merged
+    tmp = p + ".tmp"
+    json.dump(c, open(tmp, "w"), ensure_ascii=False, indent=1)
+    import os; os.replace(tmp, p)
+    print("OK")
+except Exception as e:
+    print(f"SKIP:{e}")
+PYEOF
+) || MERGE_OUT="SKIP:gen-failed"
+    case "$MERGE_OUT" in
+      OK) echo -e "${GREEN}  ✓ 权限红线已合并到 opencode.json${NC}" ;;
+      *) echo -e "${YELLOW}  ⚠ 权限合并未完成($MERGE_OUT)${NC}" ;;
+    esac
+  else
+    echo -e "${YELLOW}  ⚠ 无 python3，跳过权限合并（可手动运行 $MOD_DIR/gen-permissions.sh）${NC}"
+  fi
+
+  # ② 审计
+  if "$MOD_DIR/audit-init.sh" init >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ 审计模块已初始化（JSONL+脱敏+熔断+30天轮转）${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ 审计模块初始化失败(可手动运行 $MOD_DIR/audit-init.sh)${NC}"
+  fi
+
+  # ③ 安全自检 + AGENT-CARD
+  set +e; SEC_OUT=$(cd "$HOME" && "$MOD_DIR/security-check.sh" 2>&1); SEC_RC=$?; set -e
+  echo "$SEC_OUT" | sed 's/^/  /'   # UX-3: 完整透出(警告可读才可行动)
+  [ $SEC_RC -ne 0 ] && echo -e "${YELLOW}  ⚠ security-check 存在 FAIL 项(退出码 $SEC_RC)${NC}"
+
+  # ④ 合规文档
+  "${MOD_DIR}/gen-compliance.sh" >/dev/null 2>&1 && echo -e "${GREEN}  ✓ 合规文档已生成（compliance/COMPLIANCE.md）${NC}" || echo -e "${YELLOW}  ⚠ 合规文档生成跳过${NC}"
+
+  mkdir -p "$CONFIG_DIR/plugins"
+  # ④b A-webmap 部署(联网认知 CLI, 装 ~/.local/bin)
+  if [ -f "$SCRIPT_DIR/a-modules/webmap" ]; then
+    mkdir -p "$HOME/.local/bin"
+    cp "$SCRIPT_DIR/a-modules/webmap" "$HOME/.local/bin/webmap" && chmod +x "$HOME/.local/bin/webmap"
+    echo -e "${BLUE}  - webmap → ~/.local/bin/webmap(A-联网认知:init/search/install/update)${NC}"
+  fi
+
+  # ④c B-opencode-env 插件部署(消息注入 env 块,三 Fragment)
+  if [ -f "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" ]; then
+    cp "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" "$CONFIG_DIR/plugins/opencode-env.ts"
+    echo -e "${GREEN}  ✓ opencode-env 插件已部署 → plugins/opencode-env.ts(顶层 .ts 自动发现,env/git/codegraph 三片段)${NC}"
+  fi
+
+  # ④d D-opstate 部署(声明式状态对账 CLI)
+  if [ -f "$SCRIPT_DIR/d-modules/opstate" ]; then
+    cp "$SCRIPT_DIR/d-modules/opstate" "$HOME/.local/bin/opstate" 2>/dev/null || { mkdir -p "$HOME/.local/bin"; cp "$SCRIPT_DIR/d-modules/opstate" "$HOME/.local/bin/opstate"; }
+    chmod +x "$HOME/.local/bin/opstate"
+    echo -e "${BLUE}  - opstate → ~/.local/bin/opstate(D-声明式任务状态对账)${NC}"
+  fi
+
+  # ⑤ B-Ⅰ 环境画像(specs/B-environment.md Phase1)
+  if [ -f "$SCRIPT_DIR/b-modules/env-profile.sh" ]; then
+    cp "$SCRIPT_DIR/b-modules/env-profile.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/env-profile.sh"
+    "$MOD_DIR/env-profile.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 环境画像已生成(env-profile.md)${NC}" || true
+  fi
+
+  # ⑥ C-Ⅰ 自我画像(specs/C-embodiment.md)
+  if [ -f "$SCRIPT_DIR/c-modules/self-portrait.sh" ]; then
+    cp "$SCRIPT_DIR/c-modules/self-portrait.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/self-portrait.sh"
+    "$MOD_DIR/self-portrait.sh" 2>/dev/null && echo -e "${GREEN}  ✓ 自我画像已生成(self-portrait.json)${NC}" || true
+  fi
+
+  # ⑦ D-preset-skills 部署(仓库→用户目录)
+  if [ -d "$SCRIPT_DIR/preset-skills" ]; then
+    for d in "$SCRIPT_DIR/preset-skills"/*/; do
+      name=$(basename "$d")
+      [ -f "$d/SKILL.md" ] || continue
+      if [ -d "$CONFIG_DIR/skills/$name" ]; then
+        echo -e "${BLUE}  - skill $name 已存在,跳过${NC}"
+      else
+        mkdir -p "$CONFIG_DIR/skills/$name"
+        cp -r "$d"* "$CONFIG_DIR/skills/$name/"
+        echo -e "${GREEN}  ✓ preset-skill 已部署: $name${NC}"
+      fi
+    done
+  fi
+
+  # ⑧ subagent 路由自检(装后验证 librarian 模型跟随主配置)
+  if command -v opencode >/dev/null 2>&1; then
+    ROUTE_MODEL=$(python3 -c "import json;c=json.load(open('$CONFIG_DIR/oh-my-openagent.json'));print(next(iter(c.get('agents',{}).values(),{}).get('model','zhipuai-coding-plan/glm-5.3')))" 2>/dev/null || echo zhipuai-coding-plan/glm-5.3)
+    [ -z "$ROUTE_MODEL" ] && ROUTE_MODEL=zhipuai-coding-plan/glm-5.3
+    ROUTE_OUT=$(timeout 60 opencode run --model "$ROUTE_MODEL" '回答:OK' 2>/dev/null | grep -c OK || true)
+    ROUTE_OK=$(( ${ROUTE_OUT:-0} ))
+    if [ "$ROUTE_OK" -gt 0 ] 2>/dev/null; then
+      echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}"
+    else
+      echo -e "${YELLOW}  ⚠ 路由自检未确认,手动验证:${NC}"
+      echo "      opencode run --model $ROUTE_MODEL '回答:OK'"
+    fi
+    # patch 标记核对(两副本;自检必须能发现 patch 失效)
+    PATCH_MARK=$(node -e '
+const fs=require("fs");
+const files=[process.env.HOME+"/.config/opencode/node_modules/oh-my-openagent/dist/index.js",
+             ...fs.readdirSync(process.env.HOME+"/.cache/opencode/packages").filter(d=>d.startsWith("oh-my-openagent@")).map(d=>process.env.HOME+"/.cache/opencode/packages/"+d+"/node_modules/oh-my-openagent/dist/index.js")].filter(f=>{try{return fs.existsSync(f)}catch{return false}});
+let hit=0,total=0;
+for(const f of files){total++;try{if(fs.readFileSync(f,"utf8").includes("Model resolved via system default"))hit++}catch{}}
+console.log(hit+"/"+total)' 2>/dev/null || echo "0/0")
+    echo -e "${BLUE}  - omo patch 标记: $PATCH_MARK 副本命中(运行时副本未命中时重跑本脚本补打)${NC}"
+  fi
+
+  echo -e "${GREEN}  ✓ 安全/能力增强完成${NC}"
+  echo -e "${BLUE}    模块: $MOD_DIR (权限红线/审计/自检/合规)${NC}"
+else
+  echo -e "${YELLOW}  ⚠ 未找到 e-modules（源码仓库外运行?）——跳过增强模块${NC}"
+fi
+
+step_end 12 "安全与能力增强"
 
 # ------------------------------------------------------------------
 # 完成
@@ -802,14 +1042,14 @@ echo ""
 echo -e "${YELLOW}下一步:${NC}"
 echo ""
 echo "  1. 如需 API 提供商，编辑 opencode.json 添加 provider 配置:"
-echo "     $EDITOR $CONFIG_DIR/opencode.json"
+echo "     ${EDITOR:-vi} $CONFIG_DIR/opencode.json"
 echo "     e.g. {\"provider\":{\"anthropic\":{\"options\":{\"apiKey\":\"sk-...\"}}}}"
 echo ""
 echo "  2. 如使用 DeepSeek 等兼容 API，baseURL 填:"
 echo '     "https://api.deepseek.com/anthropic"'
 echo ""
 echo "  3. 调整模型路由（可选）:"
-echo "     $EDITOR $CONFIG_DIR/oh-my-openagent.json"
+echo "     ${EDITOR:-vi} $CONFIG_DIR/oh-my-openagent.json"
 echo "     为 agent 添加 model 字段即可覆盖默认模型，例如:"
 echo '     "oracle": {"model": "deepseek/deepseek-v4-flash"}'
 echo ""
@@ -817,17 +1057,23 @@ echo "  4. 运行 OpenCode:"
 echo "     opencode"
 echo ""
 echo "  5. 查看已安装的 skills:"
-echo '     skill({name: "superpowers/brainstorming"})'
+echo '     ls ~/.config/opencode/skills/   # superpowers 为插件,内置 /brainstorming 等斜杠命令'
 echo ""
 echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"
 echo "  模型路由:     $CONFIG_DIR/oh-my-openagent.json"
 echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
-echo "  GSD 工作流:   $GSD_DIR"
+if [ "${INSTALL_GSD:-0}" = "1" ]; then
+  echo "  GSD 工作流:   /gsd-help(已选装)"
+else
+  echo "  GSD 工作流:   未安装(INSTALL_GSD=1 可选装)"
+fi
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
-echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
-echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
-echo "  如果输入 'opencode' 仍报错 'node: not found'，请执行:"
-echo "    source ~/.bashrc"
-echo "  或重启终端"
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  echo -e "${YELLOW}⚠ WSL 注意事项:${NC}"
+  echo "  Bun 路径已写入 ~/.bashrc，新终端自动生效"
+  echo "  如果输入 'opencode' 仍报错 'node: not found'，请执行:"
+  echo "    source ~/.bashrc"
+  echo "  或重启终端"
+fi
