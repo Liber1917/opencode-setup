@@ -1063,7 +1063,11 @@ echo -e "${BLUE}配置文件位置:${NC}"
 echo "  OpenCode:     $CONFIG_DIR/opencode.json"
 echo "  模型路由:     $CONFIG_DIR/oh-my-openagent.json"
 echo "  Claude 配置:  $CLAUDE_DIR/settings.json"
-echo "  GSD 工作流:   $CONFIG_DIR/plugins/gsd"
+if [ "${INSTALL_GSD:-0}" = "1" ]; then
+  echo "  GSD 工作流:   /gsd-help(已选装)"
+else
+  echo "  GSD 工作流:   未安装(INSTALL_GSD=1 可选装)"
+fi
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
 if grep -qi microsoft /proc/version 2>/dev/null; then
