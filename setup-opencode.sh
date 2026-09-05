@@ -687,6 +687,8 @@ echo -e "${YELLOW}[9/12] GSD Core 工作流(默认跳过,INSTALL_GSD=1 启用)..
 # 非疏忽——证据链勿删: benchmarks/terminal-bench/{gsd-3arm,nogsd-3arm,gsd-showcase}.md
 if [ "${INSTALL_GSD:-0}" != "1" ]; then
   echo -e "${BLUE}  - 已跳过(需要多阶段项目工作流时: INSTALL_GSD=1 重新运行)${NC}"
+  # 锚点耦合警告: plugins/gsd-core.js 的 resolveRepoRoot 需要 gsd-core/ 目录做锚点,
+  # 单删 gsd-core/ 会让钩子桥报 "NOT enforced"(安全钩子静默失效)。只剥 skills/agents,保 gsd-core/+hooks/
   echo -e "${BLUE}  - 安全钩子层(hooks/ gsd-prompt-guard 等)保留——它是注入防线,与工作流无关${NC}"
   # 剥除历史安装的 mcp.gsd(零历史调用;本地 skills 直读文件不需要它)
   if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_DIR/opencode.json" ]; then
