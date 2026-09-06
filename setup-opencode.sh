@@ -949,6 +949,80 @@ DCP_EOF
 fi
 
 # ------------------------------------------------------------------
+# MinerU 文档解析(选装, INSTALL_MINERU=1 启用; 不占步骤号)
+# PDF/图片 → Markdown/JSON; 免费分层: Flash 云 API 免装限量 / 本地部署免费无限量
+# 云 token 档(免费额度后付费)不自动配置——本脚本只接免费路径, 详见 README「MinerU 文档解析」小节
+# ------------------------------------------------------------------
+if [ "${INSTALL_MINERU:-0}" != "1" ]; then
+  echo -e "${BLUE}  - MinerU 文档解析: 已跳过(免费分层: 轻量用 Flash MCP 免装, 大量用 INSTALL_MINERU=1 本地部署免费无限量, 见 README)${NC}"
+else
+  # ① 许可证知会(仅打印, 无确认门——Apache-2.0 宽松, 非 AGPL 级风险)
+  echo -e "${BLUE}  - MinerU 许可证知会 (Apache-2.0 + 附加条款):${NC}"
+  echo "    个人与常规商用免费; MAU>1亿或月收入>\$2000万 需商业授权;"
+  echo "    对外在线服务需标注使用了 MinerU(详见 README「MinerU 文档解析」小节)"
+
+  # ② 资源前置检查(不足仅黄警不拦截——装包本身不占大空间, 模型首次运行才下载)
+  MINERU_DISK_KB="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2{print $4}' || true)"
+  MINERU_MEM_KB="$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+  if [ -n "$MINERU_DISK_KB" ] && [ "$MINERU_DISK_KB" -lt 26214400 ]; then
+    echo -e "${YELLOW}  ⚠ 磁盘可用 $((MINERU_DISK_KB/1024/1024))GB < 25GB(本地档建议 20GB+), 资源不足仍继续装包(模型首次运行才下载)${NC}"
+  fi
+  if [ -n "$MINERU_MEM_KB" ] && [ "$MINERU_MEM_KB" -lt 15728640 ]; then
+    echo -e "${YELLOW}  ⚠ 内存 $((MINERU_MEM_KB/1024/1024))GB < 15GB(本地档建议 16GB+), 资源不足仍继续装包(模型首次运行才下载)${NC}"
+  fi
+
+  # ③ 安装: pip install "mineru[core]"(走步骤5已配置的中科大 PyPI 源; PEP 668 系统自动重试)
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo -e "${YELLOW}  ⚠ 无 python3, 跳过 MinerU 安装(手动: python3 -m pip install \"mineru[core]\")${NC}"
+  elif ! python3 -m pip --version >/dev/null 2>&1; then
+    echo -e "${YELLOW}  ⚠ pip 不可用, 跳过 MinerU 安装(手动: python3 -m ensurepip --upgrade 后 python3 -m pip install \"mineru[core]\")${NC}"
+  else
+    echo "  正在安装 MinerU(大包含 PyTorch, 走中科大源, 超时上限 900s)..."
+    MINERU_PIP_LOG="$(mktemp)"
+    timeout 900 python3 -m pip install "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
+    MINERU_PIP_RC="${PIPESTATUS[0]}"
+    if [ "$MINERU_PIP_RC" != "0" ] && grep -qi 'externally-managed' "$MINERU_PIP_LOG"; then
+      echo -e "${BLUE}  - 系统启用 PEP 668(externally-managed), 加 --break-system-packages 重试${NC}"
+      timeout 900 python3 -m pip install --break-system-packages "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
+      MINERU_PIP_RC="${PIPESTATUS[0]}"
+    fi
+    rm -f "$MINERU_PIP_LOG"
+    if [ "$MINERU_PIP_RC" = "0" ]; then
+      echo -e "${GREEN}  ✓ mineru[core] pip 安装完成${NC}"
+    else
+      echo -e "${YELLOW}  ⚠ MinerU 安装失败(网络受限/超时?), 不影响其余步骤, 可手动重试:${NC}"
+      echo "    python3 -m pip install \"mineru[core]\"   # PEP 668 系统加 --break-system-packages"
+    fi
+  fi
+
+  # ④ 环境写入: 国内模型源(幂等, 已存在不重复)
+  if ! grep -q 'MINERU_MODEL_SOURCE' "$HOME/.bashrc" 2>/dev/null; then
+    printf '\n# MinerU 模型源(国内走 modelscope)\nexport MINERU_MODEL_SOURCE=modelscope\n' >> "$HOME/.bashrc"
+    echo -e "${GREEN}  ✓ MINERU_MODEL_SOURCE=modelscope 已写入 ~/.bashrc(新终端生效)${NC}"
+  else
+    echo -e "${BLUE}  - MINERU_MODEL_SOURCE 已存在于 ~/.bashrc, 保持不动${NC}"
+  fi
+
+  # ⑤ 验证(容错): mineru --version → import magic_pdf/import mineru, 成功绿√失败黄⚠
+  MINERU_OK=0
+  if command -v mineru >/dev/null 2>&1 && mineru --version >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ MinerU 验证通过: $(mineru --version 2>/dev/null | head -1)${NC}"
+    MINERU_OK=1
+  elif python3 -c "import magic_pdf" >/dev/null 2>&1 || python3 -c "import mineru" >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ MinerU 验证通过(python 包可导入; mineru CLI 不在当前 PATH 时新开终端可用)${NC}"
+    MINERU_OK=1
+  fi
+  if [ "$MINERU_OK" != "1" ]; then
+    echo -e "${YELLOW}  ⚠ MinerU 验证未通过(安装可能失败), 手动安装指引:${NC}"
+    echo "    python3 -m pip install \"mineru[core]\"   # PEP 668 系统加 --break-system-packages"
+    echo "    文档: https://github.com/opendatalab/MinerU"
+  fi
+
+  # ⑥ 模型下载时机提示
+  echo -e "${BLUE}  - 模型约数 GB, 首次运行 mineru 时自动从 modelscope 下载${NC}"
+fi
+
+# ------------------------------------------------------------------
 # 步骤 12: 安全/能力增强模块(可选, SKIP_SECURITY=1 跳过)
 # 依据 spec: E 方向六模块(权限红线/审计/安全自检/合规) + B 方向环境画像
 # e-modules/ 随仓库分发, 安装时部署到 CONFIG_DIR
@@ -1144,6 +1218,11 @@ if [ "${INSTALL_GSD:-0}" = "1" ]; then
   echo "  GSD 工作流:   /gsd-help(已选装)"
 else
   echo "  GSD 工作流:   未安装(INSTALL_GSD=1 可选装)"
+fi
+if [ "${INSTALL_MINERU:-0}" = "1" ]; then
+  echo "  MinerU 解析:  mineru 命令(已选装, 首次运行自动从 modelscope 下载模型)"
+else
+  echo "  MinerU 解析:  未安装(大量解析 INSTALL_MINERU=1 本地档; 轻量用 Flash MCP, 见 README)"
 fi
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""

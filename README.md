@@ -54,6 +54,7 @@ cd opencode-setup
 
 ~/.npmrc                    ←  npm 镜像源（npmmirror）
 ~/.bunfig.toml              ←  Bun registry 镜像
+~/.bashrc                   ←  Bun/npm 路径；INSTALL_MINERU=1 时追加 MINERU_MODEL_SOURCE=modelscope
 ```
 
 ## 使用方式
@@ -101,6 +102,7 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 ```bash
 export INSTALL_GSD=1          # 安装 GSD 工作流（默认跳过，见下文选装说明）
 export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
+export INSTALL_MINERU=1       # 选装 MinerU 文档解析·本地档（免费无限量，Apache-2.0，见「MinerU 文档解析」小节；轻量可用 Flash MCP 免装）
 export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
 export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）
 ./setup-opencode.sh
@@ -155,6 +157,45 @@ opencode plugin @tarquinen/opencode-dcp@latest --global  # 或手动安装（官
 | 累计未缓存 input | 76.6K | 63.5K | +21%（压缩改写历史→缓存失效的代价） |
 
 模型自主触发已实测证实（9 轮内 4 次自主调用 compress，机制为 nudge 注入 + 工具可用 + 阈值到达的合力）；`/dcp-compress` 命令可手动兜底。装后脚本写入默认 `~/.config/opencode/dcp.jsonc`（compress 阈值 8K/16K 为实测加速值，上游默认 50K/100K，按模型上下文窗口调整，见文件内注释）。安装为官方全局装法，唯一配置改动是 `opencode.json` plugin 数组新增一行，卸载即逆操作。重启 OpenCode 后生效。
+
+### MinerU 文档解析（选装，`INSTALL_MINERU=1`，Apache-2.0）
+
+[MinerU](https://github.com/opendatalab/MinerU)（opendatalab 出品）把 PDF/图片解析为 Markdown/JSON，中文文档解析的主力开源工具。官方共三条路径，免费/付费情况如实如下：
+
+| 档位 | 费用 | 限制 | 适合 |
+|---|---|---|---|
+| Flash 云 API（MCP，免装） | **免费**，免装免 key | 单文件 ≤20 页 / ≤10MB，IP 限速 | 轻量、偶发的文档解析 |
+| 本地部署（`INSTALL_MINERU=1`） | **完全免费**，无限量 | 磁盘 20GB+ / 内存 16GB+（CPU pipeline 可跑）；模型数 GB 首次运行下载 | 大批量、隐私敏感、离线 |
+| 云 API token | 免费额度后按量付费 | 需自行注册购买 token | 本脚本不接，自行评估 |
+
+> **付费立场声明**：本脚本只接免费路径——轻量用 Flash MCP，大量用本地部署；云 token 档请自行评估，我们不推荐（也不会自动配置）。
+
+**轻量路径（Flash MCP，零安装）**：在 `opencode.json` 的 `mcp` 段加入以下配置即可（不设 `MINERU_API_TOKEN` 即 Flash 免费档；`uvx` 需要 [uv](https://docs.astral.sh/uv/)，MCP 来自官方 [MinerU-Ecosystem](https://github.com/opendatalab/MinerU-Ecosystem)）：
+
+```json
+"mcp": {
+  "mineru-flash": {
+    "type": "local",
+    "command": ["uvx", "mineru-open-mcp"],
+    "enabled": true
+  }
+}
+```
+
+**大量路径（本地部署）**：
+
+```bash
+INSTALL_MINERU=1 ./setup-opencode.sh
+```
+
+脚本行为（各环节独立容错，失败仅黄警不阻断其余步骤）：
+
+1. 打印许可证知会：**MinerU 为 Apache-2.0 + 附加条款——个人与常规商用免费；MAU>1 亿或月收入>$2000 万 需商业授权；对外在线服务需标注使用了 MinerU**（Apache-2.0 宽松，无需 AGPL 式确认门）
+2. 资源前置检查：磁盘可用 <25GB 或内存 <15GB 打黄色警告，仍继续装包（模型首次运行才下载，装包本身不占大空间）
+3. `pip install "mineru[core]"`（走脚本已配置的中科大 PyPI 源；PEP 668 系统自动加 `--break-system-packages` 重试；python3/pip 缺失则告警跳过并附手动指引）
+4. 幂等写入 `~/.bashrc`：`export MINERU_MODEL_SOURCE=modelscope`（国内模型源，已存在不重复写）
+5. 验证 `mineru --version` / `import magic_pdf`（容错三连），成功绿√失败黄⚠附手动安装指引
+6. 提示模型下载时机：模型约数 GB，首次运行 `mineru` 时自动从 modelscope 下载
 
 ### superpowers 路由模式（可选，`SUPERPOWERS_ROUTER=1`）
 
