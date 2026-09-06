@@ -872,6 +872,83 @@ fi
 step_end 11 "安装 RTK"
 
 # ------------------------------------------------------------------
+# DCP 上下文压缩插件(选装, INSTALL_DCP=1 启用; 不占步骤号)
+# 实测: benchmarks/terminal-bench/dcp-verify.md (末态上下文 -82%/计费当量 -43%)
+# AGPL-3.0 不默认装: 网络条款(§13)有源码披露义务风险, 须用户知情确认
+# ------------------------------------------------------------------
+if [ "${INSTALL_DCP:-0}" != "1" ]; then
+  echo -e "${BLUE}  - DCP 上下文压缩: 已跳过(INSTALL_DCP=1 可启用, AGPL-3.0, 见 README)${NC}"
+else
+  # 许可证知会 ①: 安装前显式提示(硬要求)
+  echo -e "${YELLOW}  ⚠ DCP 许可证知会 (AGPL-3.0):${NC}"
+  echo "    该插件为 AGPL-3.0 许可证: 未修改使用无义务;"
+  echo "    修改并(哪怕服务器)部署需公开修改源码; 部分企业禁用 AGPL。"
+  echo "    继续安装即视为你知情并自行决定(详见 README「DCP 上下文压缩」小节)"
+
+  DCP_CONFIRMED=0
+  if [ "${CONFIRM_AGPL:-0}" = "1" ]; then
+    DCP_CONFIRMED=1
+    echo -e "${BLUE}  - CONFIRM_AGPL=1 已显式确认(非交互双变量路径)${NC}"
+  elif [ -t 0 ]; then
+    echo -n "    确认安装 DCP? (y/n) [n, 10 秒超时自动跳过]: "
+    dcp_agree=""
+    read -r -t 10 dcp_agree || dcp_agree=""
+    if [[ "$dcp_agree" =~ ^[Yy]$ ]]; then
+      DCP_CONFIRMED=1
+    else
+      echo ""
+      echo -e "${BLUE}  - 未确认(默认/超时/拒绝), 跳过 DCP 安装${NC}"
+    fi
+  else
+    echo -e "${BLUE}  - 非交互管道且未显式确认, 跳过 DCP 安装(防 curl|bash 误触)${NC}"
+  fi
+
+  if [ "$DCP_CONFIRMED" != "1" ]; then
+    echo -e "${BLUE}    显式确认方式: INSTALL_DCP=1 CONFIRM_AGPL=1 ./setup-opencode.sh${NC}"
+  elif ! command -v opencode >/dev/null 2>&1; then
+    echo -e "${YELLOW}  ⚠ opencode 不可用, 跳过 DCP 安装${NC}"
+    echo "    手动安装: opencode plugin @tarquinen/opencode-dcp@latest --global"
+  else
+    # 官方装法(dcp-verify.md 实测一次成功; 大包下载约 3 分钟, 首跑可能超 2 分钟, 上限 10 分钟)
+    echo "  正在安装 DCP(大包下载, 超时上限 600s)..."
+    if timeout 600 opencode plugin @tarquinen/opencode-dcp@latest --global; then
+      # 默认 dcp.jsonc(若不存在): 阈值取实测可用配置, 附按模型上下文调整的说明
+      if [ ! -f "$CONFIG_DIR/dcp.jsonc" ]; then
+        cat > "$CONFIG_DIR/dcp.jsonc" << 'DCP_EOF'
+{
+  "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json",
+  // compress 阈值为实测加速值(dcp-verify.md 实验: glm-5.3 大窗口下默认值 8-12 轮内不可达);
+  // 上游默认 minContextLimit=50000 / maxContextLimit=100000。
+  // 按所用模型的上下文窗口调整: 大窗口可回调默认(触发更晚, 机制相同), 小窗口建议保持低位。
+  "compress": {
+    "minContextLimit": 8000,
+    "maxContextLimit": 16000,
+    "nudgeFrequency": 5,
+    "nudgeForce": "soft"
+  }
+}
+DCP_EOF
+        echo -e "${GREEN}  ✓ 默认 dcp.jsonc 已写入(阈值 8K/16K, 见文件内注释按模型调整)${NC}"
+      else
+        echo -e "${BLUE}  - dcp.jsonc 已存在, 保持不动${NC}"
+      fi
+      # 装后验证: opencode.json plugin 数组应含 opencode-dcp(失败仅告警, 不中止)
+      if grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
+        echo -e "${GREEN}  ✓ DCP 已注册到 opencode.json plugin 数组${NC}"
+      else
+        echo -e "${YELLOW}  ⚠ 未在 opencode.json 检出 opencode-dcp(可能安装异常), 不影响其余步骤${NC}"
+      fi
+      # 许可证知会 ②: 安装后再提示一次(硬要求)
+      echo -e "${BLUE}  - DCP 为 AGPL-3.0: 修改并(哪怕服务器)部署需公开修改源码, 未修改使用无义务${NC}"
+      echo -e "${BLUE}  - 重启 OpenCode 后 compress 工具与 /dcp-compress 命令生效${NC}"
+    else
+      echo -e "${YELLOW}  ⚠ DCP 安装命令失败(网络受限/超时?), 不影响其余步骤, 可手动重试:${NC}"
+      echo "    opencode plugin @tarquinen/opencode-dcp@latest --global"
+    fi
+  fi
+fi
+
+# ------------------------------------------------------------------
 # 步骤 12: 安全/能力增强模块(可选, SKIP_SECURITY=1 跳过)
 # 依据 spec: E 方向六模块(权限红线/审计/安全自检/合规) + B 方向环境画像
 # e-modules/ 随仓库分发, 安装时部署到 CONFIG_DIR

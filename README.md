@@ -100,6 +100,7 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 
 ```bash
 export INSTALL_GSD=1          # 安装 GSD 工作流（默认跳过，见下文选装说明）
+export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
 export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
 export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）
 ./setup-opencode.sh
@@ -125,6 +126,35 @@ export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义
 | `gen-compliance.sh` | 合规文档（CN/EU 双地区，provider 数据流向清单） | `bash gen-compliance.sh --region cn` |
 | `bwrap-setup.sh` | B 档沙箱一键脚本（clavinculis 优先，降级 opencode-bwrap） | `bash bwrap-setup.sh` |
 | `devcontainer/` | C 档容器隔离模板（非 root + cap-drop） | 见 `devcontainer/README.md` |
+
+### DCP 上下文压缩（选装，`INSTALL_DCP=1`，AGPL-3.0 需知情确认）
+
+[DCP](https://github.com/Opencode-DCP/opencode-dynamic-context-pruning)（opencode-dynamic-context-pruning，npm 包 `@tarquinen/opencode-dcp`）为 OpenCode 注入 `compress` 工具与阈值 nudge，长会话上下文呈锯齿式回落而不是单调爬升。**默认不装**，原因见下方许可证知会。
+
+> **许可证知会（AGPL-3.0-or-later，脚本安装前后各提示一次）**
+>
+> 该插件为 AGPL-3.0 许可证：未修改使用无义务；修改并（哪怕服务器）部署需公开修改源码；部分企业禁用 AGPL。继续安装即视为你知情并自行决定。
+>
+> 合规背景（详见 `benchmarks/terminal-bench/dcp-verify.md`「AGPL 合规注记」）：AGPL 网络条款（§13）使"将其作为网络服务一部分提供"可能触发整体源码披露义务；opencode 插件与主进程同进程加载（bun import），属"合并工作"解释的灰色地带。组织合规策略通常将 AGPL 列为默认禁用、需法务逐案豁免的许可证——**实验/个人沙箱可用，团队默认不装**。另注：上游开发重心已转移至 Sleev，DCP 处于维护模式，选型时需考虑上游活跃度。
+
+安装方式（交互终端会逐字显示上述知会并要求确认：默认 n、10 秒超时自动跳过；非交互管道必须双变量显式确认，防 `curl | bash` 误触）：
+
+```bash
+INSTALL_DCP=1 ./setup-opencode.sh                        # 交互确认（y 继续）
+INSTALL_DCP=1 CONFIRM_AGPL=1 ./setup-opencode.sh         # 非交互/CI 双变量显式确认
+opencode plugin @tarquinen/opencode-dcp@latest --global  # 或手动安装（官方装法）
+```
+
+实测数据（单会话 9 轮真实任务，glm-5.3，阈值调低加速触发；完整报告 `benchmarks/terminal-bench/dcp-verify.md`）：
+
+| 指标 | DCP 实验组 | `--pure` 对照 | 差异 |
+|---|---|---|---|
+| 每 fetch 上下文均值 | 15.7K | 50.2K | **-69%** |
+| 末段上下文（末 3 fetch） | ~13K | ~69K | **-82%** |
+| 计费当量（input + cacheRead/10） | 127K | 223K | **-43%** |
+| 累计未缓存 input | 76.6K | 63.5K | +21%（压缩改写历史→缓存失效的代价） |
+
+模型自主触发已实测证实（9 轮内 4 次自主调用 compress，机制为 nudge 注入 + 工具可用 + 阈值到达的合力）；`/dcp-compress` 命令可手动兜底。装后脚本写入默认 `~/.config/opencode/dcp.jsonc`（compress 阈值 8K/16K 为实测加速值，上游默认 50K/100K，按模型上下文窗口调整，见文件内注释）。安装为官方全局装法，唯一配置改动是 `opencode.json` plugin 数组新增一行，卸载即逆操作。重启 OpenCode 后生效。
 
 ### superpowers 路由模式（可选，`SUPERPOWERS_ROUTER=1`）
 
