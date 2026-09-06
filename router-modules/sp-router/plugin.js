@@ -3,13 +3,20 @@
  *
  * 替代 superpowers 官方插件的急加载(20 skill 描述进 system prompt + using-superpowers 全文进首消息 ≈9.2k token):
  *   ① 不把 skills 目录注册进 opencode 扫描路径(描述税归零)
- *   ② 首条用户消息只注入 ~400 token 能力清单(名称+一行时机)
+ *   ② 首条用户消息只注入精简路由块(v2: 纪律两行 + top-3 候选 + 兜底)
  *   ③ agent 命中场景 → Read <vault>/<name>/SKILL.md 按需加载正文(等价 Claude Code 渐进披露)
+ *
+ * v2: 启动时动态 import matcher.mjs 并读 index.yaml(候选: 插件同目录 → vault);
+ *     首条 user 消息经 route() 得 top-3 注入 v2 块。SP_ROUTER_V1=1 / 无 top-3 /
+ *     任何加载失败 → 回退 v1 全量清单, 不抛。幂等: 注入块末尾带
+ *     <!-- sp-router:superpowers_router vN --> 标记, includes('superpowers_router') 检查。
  *
  * 用法: opencode.json plugin 数组移除 superpowers@..., 加入本插件路径;
  *       superpowers skills 克隆/留在 vault 路径(本插件只读, 不安装不更新)。
  */
+import fs from 'node:fs'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
 
 // vault 路径: 优先环境变量, 回退标准克隆位
 const vault = "__SP_VAULT__"  // 部署时由 setup 注入绝对路径
@@ -38,25 +45,77 @@ const CATALOG = [
   ['using-superpowers', '(元技能)路由失效时的兜底: 完整技能使用方法论'],
 ]
 
+// 纪律两行(v1 与 v2 块共用, 逐字保留)
+const DISCIPLINE = [
+  `每次回复前(包括澄清性提问)必须先扫描下方技能清单。命中(含隐性命中——用户描述症状而非点名流程)→ 立即 Read ${vault}/<name>/SKILL.md,先读正文再行动,未读前不要凭记忆模仿流程。`,
+  `合理化跳过的红旗信号(出现即视为命中): "这是简单问题" / "不需要正式流程" / "我先做这一件事" / "我记得流程大概是什么"。`,
+]
+
 const routerBlock = `<EXTREMELY_IMPORTANT>
-每次回复前(包括澄清性提问)必须先扫描下方技能清单。命中(含隐性命中——用户描述症状而非点名流程)→ 立即 Read ${vault}/<name>/SKILL.md,先读正文再行动,未读前不要凭记忆模仿流程。
-合理化跳过的红旗信号(出现即视为命中): "这是简单问题" / "不需要正式流程" / "我先做这一件事" / "我记得流程大概是什么"。
+${DISCIPLINE[0]}
+${DISCIPLINE[1]}
 清单: ${CATALOG.map(([n]) => n).join(', ')}
 vault: ${vault}/<name>/SKILL.md
 命中多个取最相关的一个;疑似有流程但清单对不上 → Read ${vault}/using-superpowers/SKILL.md 查方法论。
 </EXTREMELY_IMPORTANT>
 <skill_catalog>
 ${CATALOG.map(([n, d]) => `- ${n}: ${d}`).join('\n')}
-</skill_catalog>`
+</skill_catalog>
+<!-- sp-router:superpowers_router v1 -->`
 
-export const SpRouterPlugin = async () => ({
-  'experimental.chat.messages.transform': async (_input, output) => {
-    if (!output.messages?.length) return
-    const first = output.messages.find(m => m.info?.role === 'user')
-    if (!first?.parts?.length) return
-    if (first.parts.some(p => p.type === 'text' && p.text.includes('superpowers_router'))) return // 幂等
-    first.parts.unshift({ type: 'text', text: routerBlock })
-  },
-})
+// v2 精简块: 纪律两行 + top-3 候选(命中词至多 3 个)+ 兜底行
+const v2Block = (top, indexPathUsed, skillCount) => `<EXTREMELY_IMPORTANT>
+${DISCIPLINE[0]}
+${DISCIPLINE[1]}
+候选(按路由分):
+${top.map((r, i) => `${i + 1}. ${r.name} [${r.hits.slice(0, 3).join(' ')}] — Read ${vault}/${r.name}/SKILL.md`).join('\n')}
+以上不覆盖时 Read ${indexPathUsed} 全量匹配(${skillCount} 技能)。
+</EXTREMELY_IMPORTANT>
+<!-- sp-router:superpowers_router v2 -->`
+
+export const SpRouterPlugin = async () => {
+  // 启动: 动态引 matcher + 读 index.yaml(候选: 插件同目录 → vault);任何失败 → console.error 一行, v1 兜底
+  let routeFn = null
+  let loadedIndex = null
+  let loadedIndexPath = null
+  try {
+    const matcher = await import(new URL('./matcher.mjs', import.meta.url).href)
+    const pluginDir = path.dirname(fileURLToPath(import.meta.url))
+    const candidates = [path.join(pluginDir, 'index.yaml'), path.join(vault, 'index.yaml')]
+    for (const cand of candidates) {
+      let raw
+      try { raw = fs.readFileSync(cand, 'utf8') } catch { continue }
+      const idx = matcher.parseIndex(raw)
+      if (!Array.isArray(idx?.skills) || idx.skills.length === 0) continue
+      routeFn = matcher.route
+      loadedIndex = idx
+      loadedIndexPath = cand
+      break
+    }
+    if (!loadedIndex) console.error(`[sp-router] v2 索引未就绪(候选均不可用: ${candidates.join(' | ')}),回退 v1 清单`)
+  } catch (e) {
+    console.error(`[sp-router] v2 加载失败(${e?.message ?? e}),回退 v1 清单`)
+  }
+
+  return {
+    'experimental.chat.messages.transform': async (_input, output) => {
+      if (!output.messages?.length) return
+      const first = output.messages.find(m => m.info?.role === 'user')
+      if (!first?.parts?.length) return
+      if (first.parts.some(p => p.type === 'text' && p.text.includes('superpowers_router'))) return // 幂等
+      let block = routerBlock // v1 兜底
+      if (process.env.SP_ROUTER_V1 !== '1' && routeFn) {
+        try {
+          const text = first.parts.filter(p => p.type === 'text').map(p => p.text).join('')
+          const top = routeFn(text, loadedIndex)
+          if (top.length > 0) block = v2Block(top, loadedIndexPath, loadedIndex.skills.length)
+        } catch (e) {
+          console.error(`[sp-router] v2 路由失败(${e?.message ?? e}),回退 v1 清单`)
+        }
+      }
+      first.parts.unshift({ type: 'text', text: block })
+    },
+  }
+}
 
 export default SpRouterPlugin
