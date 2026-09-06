@@ -106,7 +106,8 @@ export const SpRouterPlugin = async () => {
       let block = routerBlock // v1 兜底
       if (process.env.SP_ROUTER_V1 !== '1' && routeFn) {
         try {
-          const text = first.parts.filter(p => p.type === 'text').map(p => p.text).join('')
+          let text = first.parts.filter(p => p.type === 'text').map(p => p.text).join('')
+          text = text.replace(/<!-- sp-router:[^>]*-->/g, '')
           const top = routeFn(text, loadedIndex)
           if (top.length > 0) block = v2Block(top, loadedIndexPath, loadedIndex.skills.length)
         } catch (e) {

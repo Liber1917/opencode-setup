@@ -179,3 +179,67 @@ test('真实索引: "为什么结果错了" → systematic-debugging 置顶', ()
   const top = route('为什么结果错了', realIdx)
   assert.equal(top[0].name, 'systematic-debugging')
 })
+
+// ---- 信号两级命中(full/partial)+ 黑名单整串降权(语义修复) ----
+
+test('两级: full=信号全部 token ∈ query → strong +2; 单 bigram 交叠不再命中', () => {
+  const idx = mk([{ name: 'a', strong: ['崩溃修复'] }])
+  // '崩溃修复' 3 个 bigram 全在 query → full +2
+  assert.deepEqual(route('崩溃修复', idx), [{ name: 'a', score: 2, hits: ['崩溃修复'] }])
+  // 仅 '崩溃' 一个 bigram 交叠(命中 1 < 2, 且非全部) → 零命中
+  assert.deepEqual(route('崩溃日志堆栈', idx), [])
+})
+
+test('两级: full 对 weak → +1', () => {
+  const idx = mk([{ name: 'a', weak: ['返回值'] }])
+  assert.deepEqual(route('函数返回值', idx), [{ name: 'a', score: 1, hits: ['返回值'] }])
+})
+
+test('两级: partial=命中 token≥2 且 ≥信号 token 数 60% → strong +1; 不足 60% 不命中', () => {
+  // '崩溃修复堆栈' 5 token, query 命中 崩溃/修复/堆栈 = 3(=60%) → partial +1
+  const idx = mk([{ name: 'a', strong: ['崩溃修复堆栈'] }])
+  assert.deepEqual(route('崩溃和修复和堆栈', idx), [{ name: 'a', score: 1, hits: ['崩溃修复堆栈'] }])
+  // 命中 2/5 = 40% < 60% → 不命中
+  assert.deepEqual(route('崩溃 修复', idx), [])
+})
+
+test('两级: partial 对 weak → +0.5', () => {
+  // '错误堆栈' 3 token, 命中 错误/堆栈 = 2(66.7% ≥ 60%) → partial +0.5
+  const idx = mk([{ name: 'a', weak: ['错误堆栈'] }])
+  assert.deepEqual(route('错误和堆栈', idx), [{ name: 'a', score: 0.5, hits: ['错误堆栈'] }])
+})
+
+test('黑名单: 信号串与 GENERIC_WORDS 完全相等 → 该信号得分 ×0.25', () => {
+  const idx = mk([{ name: 'a', weak: ['技能'] }, { name: 'b', strong: ['继续'] }])
+  // '技能' weak full 本应 +1 → ×0.25 = 0.25
+  assert.deepEqual(route('技能', idx), [{ name: 'a', score: 0.25, hits: ['技能'] }])
+  // '继续' strong full 本应 +2 → ×0.25 = 0.5
+  assert.deepEqual(route('继续', idx), [{ name: 'b', score: 0.5, hits: ['继续'] }])
+})
+
+test('黑名单: 仅整串完全相等才 ×0.25; 含泛化词的长信号不降权', () => {
+  const idx = mk([
+    { name: 'a', strong: ['继续'] },     // 黑名单整串 → 降权
+    { name: 'b', strong: ['继续开发'] }, // 非整串相等 → 不降权
+  ])
+  // query '继续 开发': a full 2×0.25=0.5; b 命中 2/3 ≥60% → partial +1 → b 胜 a
+  const res = route('继续 开发', idx)
+  assert.deepEqual(res.map((r) => r.name), ['b', 'a'])
+  assert.deepEqual(res.map((r) => r.score), [1, 0.5])
+})
+
+// ---- wrapper 回归(仲裁修正版) ----
+
+test('wrapper 回归 A(污染不垄断): 真实报错句 top-3 中 debugging 高于 writing-skills', () => {
+  const top = route('根据下方技能指引,这个函数返回值不对,帮我看看', realIdx)
+  const names = top.map((r) => r.name)
+  const dbg = names.indexOf('systematic-debugging')
+  const wsk = names.indexOf('writing-skills')
+  assert.ok(dbg >= 0, `systematic-debugging 应在 top-3: ${JSON.stringify(top)}`)
+  assert.ok(wsk < 0 || wsk > dbg, `writing-skills 不应高于 systematic-debugging: ${JSON.stringify(top)}`)
+})
+
+test('wrapper 回归 B(纯技能句正确路由): 技能元问句允许 writing-skills 在列', () => {
+  const top = route('根据下方技能指引,你会先读哪一个技能的 SKILL.md?只回答技能名', realIdx)
+  assert.ok(top.map((r) => r.name).includes('writing-skills'), `top-3=${JSON.stringify(top)}`)
+})

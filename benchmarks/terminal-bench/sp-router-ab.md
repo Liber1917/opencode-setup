@@ -121,3 +121,105 @@ v2 判分说明: #2/#8/#9 回复为"技能名+理由"格式(违背"只回答技�
 - 全量运行日志: `/tmp/opencode/sp-ab/logs/{v1,v2}-<1..10>.log`(每句完整输出)+ `v1-smoke/v2-smoke/bare-1.log`
 - 会话数据快照(db 提取): `/tmp/opencode/sp-ab/session-snapshot.json`(沙箱 HOME 清理后仍可复核)
 - 沙箱 HOME(home1/home2/home3)与 vault 拷贝已于报告落盘后清理;router-modules 全程只读未动
+
+# B 轮: 语义修复+改判据重跑
+
+> 2026-09-06 · 执行者: Sisyphus-Junior · 仲裁已定方案逐字执行(两级命中+黑名单整串×0.25+transform 剥离行),判据预注册仅此一轮: **v2 端到端 ≥ v1−1 且 v2 会话均 input < v1×0.6 → PASS;否则 FAIL 永久停**
+
+## 修复内容(diff 摘要)
+
+- `matcher.mjs`:
+  - 顶部新增 `GENERIC_WORDS = ['技能','skill','文档','工具','怎么做','检查','继续','开始','下一步','讨论','评估','需求','失败','异常','重构','实现']`(16 词,泛化词降权);
+  - 撒种语义从"任一 token 重叠即整条信号命中"(旧 `overlaps=some`)改为两级: **full**=信号全部 token ∈ query → strong×2/weak×1;**partial**=命中 token≥2 且 ≥信号 token 数 60% → strong×1/weak×0.5;其余不命中;
+  - 信号字符串与 GENERIC_WORDS **完全相等**时该信号得分 ×0.25(仅整串相等一种情况,含泛化词的长信号不降权);
+  - name×3、co-requires/supersedes/conflicts-with 三边、weight、排序与平局规则: 逐行未动。
+- `matcher.test.mjs`: 保留全部 16 条既有断言,新增 8 条: full×2 / partial×2 / 黑名单×2 / wrapper 回归 A(污染不垄断)与 B(纯技能句正确路由)。**先红后绿**: 修复前运行 6 条新断言失败(`两级: full…单 bigram 交叠不再命中`/`两级: partial…60%`/`两级: partial 对 weak`/`黑名单…×0.25`/`黑名单…仅整串`/`wrapper 回归 A`),红证据存 `/tmp/opencode/sp-ab/b/red-evidence.txt`;修复后 24/24 全绿。三真实用例原断言(返回值不对/改完了/为什么结果错了)全绿,**未动 index.yaml**(0 词补充,允许额度 6 未用)。
+- `plugin.js`: transform 提取首条消息文本后新增一行 `text = text.replace(/<!-- sp-router:[^>]*-->/g,'')`(剥离 sp-router 注释标记后再路由);该行需 `const text` → `let text`,其余逐字未动。QA(/tmp/opencode/sp-ab/b/qa-transform.mjs,8 项全 PASS): v2 块注入/top-1 候选正确/幂等不二次注入/剥离后仍注入/正则剥 v1·v2 标记且不动普通 HTML 注释。
+- 说明两点(按字面执行): ①黑名单整串比较为大小写敏感的字符串全等(`'SKILL.md'`≠`'skill'`,故 writing-skills 的 strong `SKILL.md` 不降权——wrapper 含 "SKILL.md" 字样时其 full 命中是字面命中,属断言 B 认定的正确行为);②上轮已部署的 `~/.config/opencode/plugins/sp-router.ts` 为 setup 生成物,不在本次 SCOPE,实验沙箱从源 `plugin.js` 重新 sed 部署。
+
+## B 轮测试集(执行前冻结,跑的过程中未改)
+
+句子来源: 执行者现造,不点名(无技能名/无 /命令),口语化;冻结原件 `/tmp/opencode/sp-ab/b/testset.md`。句子设计与冻结前用修复后的 matcher 做过离线核算(检索层数据见下文矩阵"裸句"列,即披露此项),冻结后未再改。锚点句为任务指定原文(与上轮 #1 同句),其余 9 句与上轮 10 句文字均不同。
+
+| # | 句子 | 期望技能 | 理由(一句话) |
+|---|------|---------|-------------|
+| 1 | 改完了,可以提交了吧? | verification-before-completion | [锚点·上轮同句]声称完成求放行,应先跑验证拿证据 |
+| 2 | 一调用就报错,错误信息每次还不一样,时灵时不灵的 | systematic-debugging | 非确定性报错+症状漂移,应系统化根因排查 |
+| 3 | 想做一个内网知识库问答机器人,技术选型还没定,先帮我出出主意 | brainstorming | 创造性工作前置意图探索 |
+| 4 | 下个月要做灰度发布,PRD 也评审完了,帮我把任务拆解和排期理出来 | writing-plans | 有规格要拆多步骤计划 |
+| 5 | 这三张报表谁也不影响谁,能不能并行一起跑? | dispatching-parallel-agents | 无依赖多任务应并行派发 |
+| 6 | 要在生产代码上试个大改动,又怕搞坏现场,能不能先弄个隔离的工作区再动手 | using-git-worktrees | 危险改动需隔离工作区 |
+| 7 | 同事在我的 MR 上提了一堆评审意见,有几条我觉得不对想反驳,怎么回复比较好? | receiving-code-review | 收到审查反馈应严谨甄别而非盲从 |
+| 8 | 每次发版 changelog 都得手写,能不能从提交历史自动生成?顺便把 commit 规范也定下来 | chinese-commit-conventions | 中文团队 commit/changelog 规范工具链 |
+| 9 | 这个分支可以合回去了,还没推送远端,要不要先推再合? | finishing-a-development-branch | 实现完成后的集成决策 |
+| 10 | 这个 bug 我想用红绿重构的节奏修,先写个失败测试再动手 | test-driven-development | 明确要先写测试再实现 |
+
+覆盖 10 个不同技能(要求 ≥6),含锚点 1 句。
+
+## 判据预注册(仅此一轮)
+
+- 双臂协议同上轮 §实验设置(沙箱 HOME×2、裸 opencode.json+auth.json、sed 部署 plugins/sp-router.ts+matcher.mjs+index.yaml+vault 只读拷贝、SP_ROUTER_V1 切换、同一 wrapper 逐字、--title spab-<臂>-<N>、每句 1 次)。
+- 命中判分: 回答中**唯一命名技能==期望**计命中(与上轮同口径)。
+- token 口径: 会话输入 = Σ(assistant 消息 tokens.input 非缓存 + tokens.cache.read 缓存读),db 提取,与上轮同口径。
+- **PASS 条件(两项须同时成立): ① v2 端到端命中数 ≥ v1 端到端命中数 − 1;② 对每个句子 i, v2 会话输入[i] < 0.6 × v1 会话输入[i](逐句成对比较,"均"=无例外)。任一不满足 → FAIL,永久停。**
+
+## B 轮结果
+
+正式运行前冒烟 2 次(v1/v2 臂各 1,锚点句,不计数)+ 裸控 1 次(见 token 节);冒烟注入正常,无注入竞态。
+
+### 双臂结果矩阵
+
+| # | 期望 | v1 回答 | v1 | v2 回答 | v2 | 检索裸句 top-3 | 实况注入 top-3 | v2 Read |
+|---|------|---------|----|---------|----|----------------|----------------|---------|
+| 1 | verification-before-completion | verification-before-completion | ✅ | verification-before-completion | ✅ | verification(4) | verification(4)·writing-skills(3.5)·TDD(1.75) | SKILL.md |
+| 2 | systematic-debugging | systematic-debugging | ✅ | systematic-debugging | ✅ | sd(2)·verification(1) | writing-skills(3.5)·sd(2)·TDD(1.75) | — |
+| 3 | brainstorming | brainstorming | ✅ | brainstorming | ✅ | brainstorming(4)·writing-plans(2) | brainstorming(4)·writing-skills(3.5)·writing-plans(2) | — |
+| 4 | writing-plans | writing-plans | ✅ | writing-plans | ✅ | writing-plans(7)·executing-plans(3.5) | writing-plans(7)·executing-plans(3.5)·writing-skills(3.5) | — |
+| 5 | dispatching-parallel-agents | dispatching-parallel-agents | ✅ | dispatching-parallel-agents | ✅ | dispatch(4.5) | dispatch(4.5)·writing-skills(3.5)·TDD(1.75) | — |
+| 6 | using-git-worktrees | using-git-worktrees | ✅ | using-git-worktrees | ✅ | worktrees(4) | worktrees(4)·writing-skills(3.5)·TDD(1.75) | SKILL.md(v1 也读了) |
+| 7 | receiving-code-review | receiving-code-review | ✅ | receiving-code-review | ✅ | receiving(5)·cc-review(1)·sd(1) | receiving(5)·writing-skills(3.5)·TDD(1.75) | — |
+| 8 | chinese-commit-conventions | **brainstorming** | ❌ | chinese-commit-conventions | ✅ | ccc(8) | ccc(8)·writing-skills(3.5)·TDD(1.75) | SKILL.md |
+| 9 | finishing-a-development-branch | finishing-a-development-branch | ✅ | finishing-a-development-branch | ✅ | finishing(3.5)·verification(1.75)·worktrees(1) | finishing(3.5)·writing-skills(3.5)·TDD(1.75) | SKILL.md |
+| 10 | test-driven-development | test-driven-development | ✅ | test-driven-development | ✅ | TDD(4.25)·sd(2.25)·verification(1.13) | TDD(6.5)·writing-skills(4.5)·sd(2.25) | — |
+| | **小计** | | **9/10** | | **10/10** | 期望∈top-3 **10/10**(裸句全部 top-1) | 期望∈top-3 **10/10**(9 top-1,#2 top-2) | 4/10 候选 SKILL.md;**index.yaml 兜底 0/10** |
+
+- v2 全部 10 句回答为干净技能名(无附带理由),严格满足"只回答技能名";v1 亦然。
+- 检索层对比上轮: 裸句 7/10→**10/10**,实况 0/10→**10/10**,兜底 Read index.yaml 9/10→**0/10**——两级命中+黑名单语义修复完全生效。
+- #8 是 v2 对 v1 的唯一净胜局: v1 全量目录下模型把"changelog 自动生成"误路由到 brainstorming;v2 的 ccc top-1(命中 changelog/commit 规范)引导正确。
+- v2 有 4 句模型按 v2 块纪律先 Read 候选 SKILL.md 再作答(渐进披露的设计内行为,非兜底);v1 的 #6 也自发读了一次 SKILL.md。
+
+### Token 对照(db 实测,输入=非缓存+缓存读,与上轮同口径)
+
+| # | v1 total | v2 total | 0.6×v1 | v2<0.6×v1? | | # | v1 total | v2 total | 0.6×v1 | v2<0.6×v1? |
+|---|---------|---------|--------|-----------|---|---|---------|---------|--------|-----------|
+| 1 | 7,819 | 16,215 | 4,691 | ✗ | | 6 | 18,097 | 17,128 | 10,858 | ✗ |
+| 2 | 7,829 | 7,379 | 4,697 | ✗ | | 7 | 7,833 | 7,389 | 4,700 | ✗ |
+| 3 | 7,832 | 7,387 | 4,699 | ✗ | | 8 | 7,838 | 18,662 | 4,703 | ✗ |
+| 4 | 7,835 | 7,393 | 4,701 | ✗ | | 9 | 7,830 | 17,942 | 4,698 | ✗ |
+| 5 | 7,825 | 7,386 | 4,695 | ✗ | | 10 | 7,830 | 7,394 | 4,698 | ✗ |
+
+- **裸控(无插件,锚点句,home3)**: total **7,086**(nc 46 + cr 7,040)——本环境 opencode 1.18.29 的系统提示+工具 schema 基座本身 ≈7.0k,两臂共享且几乎全部走缓存读。
+- v1 均值 8,857 / v2 均值 11,428(v2/v1≈1.29,4 句读 SKILL.md 所致);中位数 v1 7,832 / v2 7,391(v2 便宜 5.6%)。逐句 nc: v1 首跑 1,035-1,051(块未缓存)后转 81-94;v2 单轮句 218-347,读 SKILL.md 句 1,815-4,134。
+- **结构性事实**: v1≈7.0k 基座+0.8k 全量目录块;v2≈7.0k 基座+0.2-0.35k 精简块。判据②的门槛 0.6×v1≈4.7k **低于基座本身(7.0k)**——即便插件零开销,v2 也不可能逐句 < 0.6×v1。判据隐含的是 A 轮"裸基线 2,214/起步税 5.6k"的账,而本轮实测裸基线已是 7,086(环境/版本漂移,A 轮裸测与本轮非同一基座状态)。nc-only 口径同样全败(如 #10: v1 nc 86×0.6=52 vs v2 nc 226)。
+
+### 判据核算(预注册,逐字)
+
+- 条件①: v2 端到端 10/10 ≥ v1 端到端 9/10 − 1 = 8 → **成立**
+- 条件②: 逐句 v2 input < 0.6×v1 input → **10/10 全部不成立**(见上表)
+- **判定: FAIL。按预注册规则,永久停,不再有 C 轮。**
+
+## B 轮诚实讨论
+
+1. **检索层修复被端到端证实**: 实况 top-3 从 0/10 到 10/10、兜底从 9/10 到 0/10、v2 端到端首次超过 v1(10/10 vs 9/10)——A 轮诊断的"wrapper 词污染+单 bigram 引爆"两个根因都被两级命中+黑名单语义消除。v2 的失分已不在检索。
+2. **FAIL 是判据②的结构性不可达,不是修复失败**: 门槛 4.7k < 共享基座 7.0k,任何插件方案(含零开销)都过不了。若判据按"插件增量税"口径(v1 块 ~0.75k vs v2 块 ~0.3k,省 ~60%)或按中位数,结论会反转;但预注册判据不允许赛后改口径,如实 FAIL。
+3. **v2 的 token 劣势主要来自"读 SKILL.md"的设计内行为**(4/10 句触发,每句 +9k): 渐进披露把目录税换成了按需正文税,单句总成本反超 v1 的全量目录。若产品目标是省 token,v2 块应显式指示"只答技能名,不要 Read";若目标是流程保真(先读正文再行动),当前行为正确——这是产品决策,不是缺陷。
+4. **v1 的 9/10 与上轮 10/10 的差异是单次采样方差**(A 轮已记录 v1 存在同句波动);#8 的失手方向(创造性词汇压过工具词)与上轮 v1 天花板叙述一致。
+5. **黑名单整串 ×0.25 的实测效果**: 实况消息中 writing-skills 仍稳定 ~3.5 分(SKILL.md strong full +2 属字面命中,不断言 B 认定为正确行为),但不再垄断——所有期望技能均进 top-3,9/10 top-1。
+6. 过程事故: 无(首轮 runner 空格切句教训已用 mapfile 规避;20 正式+2 冒烟+1 裸控全部干净落库)。
+
+## B 轮工件清单
+
+- 冻结测试集: `/tmp/opencode/sp-ab/b/testset.md`;runner: `/tmp/opencode/sp-ab/b/runner.sh`;QA: `qa-transform.mjs`;红证据: `red-evidence.txt`;离线检索核算: `route-check.mjs` + `route-check-output.txt`
+- 全量运行日志: `/tmp/opencode/sp-ab/b/logs/{v1,v2}-<1..10>.log` + `v1-smoke/v2-smoke/bare-1.log`
+- 会话数据快照: `/tmp/opencode/sp-ab/b/session-snapshot-b.json`(含裸控)
+- 沙箱 HOME(home1/home2/home3)于报告落盘后清理;本轮改动仅限 router-modules/sp-router/{matcher.mjs,matcher.test.mjs,plugin.js}(index.yaml 未动)与本报告

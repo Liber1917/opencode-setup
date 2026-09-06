@@ -6,9 +6,13 @@
  *                    CJK 连续段: 长度 1 → 该单字, ≥2 → 二字滑窗 bigram。
  *   parseIndex(text) 极简 YAML 子集解析(解析器抄自同目录 validate.mjs, 不 import——其顶层有 main 副作用),
  *                    返回 {skills:[{name,path,tier,domain,signals,relations,weight}]}, 缺省字段给默认。
- *   route(query, index) 撒种(name+3/strong+2/weak+1) → 一层传播(co-requires ×0.5 /
- *                    supersedes 转移 ×0.7 清零 / conflicts-with 低者清零) → ×weight 取 top-3。
+ *   route(query, index) 撒种(name+3/strong·weak 两级: full ×2/×1, partial ×1/×0.5, 黑名单整串 ×0.25)
+ *                    → 一层传播(co-requires ×0.5 / supersedes 转移 ×0.7 清零 / conflicts-with 低者清零) → ×weight 取 top-3。
  */
+
+// 泛化词降权: 信号字符串与之完全相等时该信号得分 ×0.25(来源 sp-router-ab.md 检索层诊断)
+const GENERIC_WORDS = ['技能', 'skill', '文档', '工具', '怎么做', '检查', '继续', '开始', '下一步', '讨论', '评估', '需求', '失败', '异常', '重构', '实现']
+
 // ---------------------------------------------------------------------------
 // tokenize
 // ---------------------------------------------------------------------------
@@ -229,6 +233,19 @@ export function route(query, index) {
     hitsMap.set(s.name, [])
   }
   const overlaps = (tokens) => tokens.some((t) => qt.has(t))
+  // 信号命中两级: full=信号全部 token ∈ query → strong×2/weak×1;
+  // partial=命中 token≥2 且 ≥信号 token 数 60% → strong×1/weak×0.5; 其余不命中。
+  // 信号串与 GENERIC_WORDS 完全相等 → 该信号得分 ×0.25(仅此一种情况)。
+  const signalPoints = (sig, strong) => {
+    const toks = tokenize(sig)
+    let hits = 0
+    for (const t of toks) if (qt.has(t)) hits++
+    let pts = 0
+    if (toks.length > 0 && hits === toks.length) pts = strong ? 2 : 1
+    else if (hits >= 2 && hits >= toks.length * 0.6) pts = strong ? 1 : 0.5
+    if (pts > 0 && GENERIC_WORDS.includes(sig)) pts *= 0.25
+    return pts
+  }
   const addHit = (name, raw) => {
     const h = hitsMap.get(name)
     if (!h.includes(raw)) h.push(raw)
@@ -239,21 +256,23 @@ export function route(query, index) {
     score.set(name, score.get(name) + pts)
   }
 
-  // 撒种: name +3 / strong +2 / weak +1, hits 记原串(去重保持序)
+  // 撒种: name +3(不动) / strong·weak 两级命中计分, hits 记原串(去重保持序)
   for (const s of skills) {
     if (overlaps(tokenize(s.name))) {
       bump(s.name, 3)
       addHit(s.name, s.name)
     }
     for (const sig of s.signals?.strong ?? []) {
-      if (overlaps(tokenize(sig))) {
-        bump(s.name, 2)
+      const pts = signalPoints(sig, true)
+      if (pts > 0) {
+        bump(s.name, pts)
         addHit(s.name, sig)
       }
     }
     for (const sig of s.signals?.weak ?? []) {
-      if (overlaps(tokenize(sig))) {
-        bump(s.name, 1)
+      const pts = signalPoints(sig, false)
+      if (pts > 0) {
+        bump(s.name, pts)
         addHit(s.name, sig)
       }
     }
