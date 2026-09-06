@@ -12,6 +12,7 @@
 | C-embodiment.md | 具身认知(画像/双通道/模型适配) | ✅ 实装(双通道目录/模板/0600画像;mem0/SkillOpt 手动装已文档化) |
 | D-control.md | 控制(skill 构成/协调/拓扑) | ✅ 机制实装+部署(opstate/preset-skills/fetch指引含grilling;skill内容按版权边界手动摘取) |
 | E-security.md | 安全(E 六模块) | ✅ 实装+部署(59规则/审计+成本告警/AGENT-CARD/合规;escalation由ask通道承载,budget=调用量代理告警) |
+| C-embodiment-phase2-routing.md | 具身认知 Phase2(MoE 式上下文路由: gate/首跑init/routing.jsonl/SkillOpt夜审) | ⏸ 设计定稿但实施判负——sp-router 判决实验 A/B 两轮 FAIL(检索缺陷→修复后准确率达标,token 判据②结构性不可达),gate/路由日志/夜审均未实施,随 B 轮终局永久搁置;渐进披露组件资产保留在 router-modules/sp-router/,GSD 状态注入已随 env 插件落地(GsdFragment)。详见 benchmarks/terminal-bench/sp-router-ab.md |
 
 ## 实施任务清单(按优先级)
 

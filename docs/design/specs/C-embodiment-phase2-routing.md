@@ -1,5 +1,7 @@
 # 方向 C Phase 2:MoE 式路由层(2026-08-30:决策定稿,规格化待评审)
 
+> **终局注记(2026-09-06)**:本 spec 设计仍有效,但实施判负——预注册判决实验两轮 FAIL(A 轮检索层缺陷;B 轮修复后 v2 端到端准确率 10/10 ≥ v1,但 token 判据结构性不可达),gate(§3.1)/首跑 init(§3.2)/路由日志(§3.3)/SkillOpt 夜审(§3.4)均未实施,随 sp-router B 轮终局搁置。渐进披露组件资产保留在 `router-modules/sp-router/`;GSD 状态注入(§2.2)已随 b-modules env 插件落地(GsdFragment)。详见 `benchmarks/terminal-bench/sp-router-ab.md`。
+
 > 定位:承接 `C-embodiment.md`(C-2 双通道审批、C-5 SkillOpt 集成),问题从「装什么」升级为「当前会话激活什么」。全量安装保证冷启动零等待,路由层保证只付当前领域的 token 税。
 > 状态:核心决策已定稿,本文只做结构化与实现细节补全,不引入新决策。
 > 关联:B-environment.md(env 插件、Fragment 注入)、D-control.md(skill 构成)、E-security.md(audit 目录、审计 hook)。

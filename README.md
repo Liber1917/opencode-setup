@@ -32,6 +32,9 @@ cd opencode-setup
 - **apt 源自动测速** — 对 6 个国内镜像 + 官方源真实下载测速，自动切换最快源（官方最快则不动，已自定义则跳过）
 - **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 中科大 PyPI 源
 - **GSD Core 工作流（选装）** — 项目全生命周期管理；默认不装（实测零完成率收益、~4k tok/会话常驻成本），`INSTALL_GSD=1` 启用
+- **DCP 上下文压缩（选装）** — `INSTALL_DCP=1`（AGPL-3.0 需双重知会确认）；长会话上下文锯齿式回落，实测末态 -82%、计费当量 -43%
+- **MinerU 文档解析（选装）** — `INSTALL_MINERU=1` 本地档免费无限量（PDF/图片 → Markdown/JSON）；轻量走 Flash MCP 免装
+- **superpowers 路由模式（选装）** — `SUPERPOWERS_ROUTER=1` 渐进披露替代官方急加载（v1 全量目录 / v2 top-3 检索双形态）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
 
@@ -39,19 +42,22 @@ cd opencode-setup
 
 ```
 ~/.config/opencode/
-├── opencode.json           ←  MCP（codegraph，安装成功时自动注册）+ 插件配置（oh-my-openagent + superpowers）
+├── opencode.json           ←  MCP（codegraph，安装成功时自动注册）+ 插件配置（oh-my-openagent；路由模式下 superpowers 不进 plugin 数组）
 ├── oh-my-openagent.json    ←  Agent 模型路由
-├── node_modules/           ←  oh-my-openagent + superpowers 插件
-├── plugins/                ←  rtk.ts（命令输出压缩）
+├── dcp.jsonc               ←  DCP 配置（INSTALL_DCP=1 时生成；阈值实测加速值，见文件内注释）
+├── node_modules/           ←  oh-my-openagent（官方模式下另有 superpowers 插件）
+├── plugins/                ←  rtk.ts（命令输出压缩）/ opencode-env.ts（步骤 12）/ sp-router.ts（SUPERPOWERS_ROUTER=1）
 ├── command/                ←  GSD Core 命令（INSTALL_GSD=1 时存在）
-├── skills/                 ←  技能链接库
+├── skills/                 ←  技能目录（步骤 12 部署 preset-skills）
+├── sp-vault/               ←  superpowers-zh 克隆（SUPERPOWERS_ROUTER=1 时存在，更新 = git pull）
 ├── AGENT-CARD.md           ←  Agent 环境披露（步骤 12 生成）
 ├── compliance/             ←  合规文档 CN/EU（步骤 12 生成）
-└── opencode-setup-modules/ ←  E 模块（权限红线/审计/自检/合规脚本）
+└── opencode-setup-modules/ ←  E 模块（权限红线/审计/自检/合规 + env-profile/self-portrait）
 
 ~/.claude/
 └── settings.json           ←  Hooks 配置
 
+~/.local/bin/               ←  webmap / opstate（步骤 12 部署；rtk 非 root 回退时也在此）
 ~/.npmrc                    ←  npm 镜像源（npmmirror）
 ~/.bunfig.toml              ←  Bun registry 镜像
 ~/.bashrc                   ←  Bun/npm 路径；INSTALL_MINERU=1 时追加 MINERU_MODEL_SOURCE=modelscope
@@ -59,20 +65,23 @@ cd opencode-setup
 
 ## 使用方式
 
-安装脚本按 12 步执行：
+安装脚本按 12 步执行（`sh` 运行会在开始前自动切换 bash）：
 
-1. 检测已有配置并备份（非 bash 环境在步骤 0 自动切换）
-2. 生成 opencode.json / oh-my-openagent.json / Claude settings
-3. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
-4. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
-5. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
-6. 通过 Bun 安装 OpenCode
-7. 安装 oh-my-openagent 插件
-8. GSD Core 工作流（默认跳过,INSTALL_GSD=1 选装）
-9. 安装 CodeGraph CLI
-10. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
-11. omo 模型路由补丁（子代理跟随主配置）
-12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件 / opstate / env-profile / self-portrait / preset-skills / 路由自检
+1. 检测已有配置（发现现存配置时可选备份后重生成，非交互默认保留现有配置）
+2. 创建配置目录
+3. 生成 opencode.json（有 python3 时校验 JSON，损坏即中止）/ oh-my-openagent.json / Claude settings
+4. apt 源测速优化（6 国内镜像 + 官方测速，最快者自动切换，失败自动还原）
+5. 检查前置依赖：unzip、node（npmmirror 二进制优先，回退 nodesource）+ 配置 npm/PyPI 镜像源
+6. 安装 Bun 运行时（npm 镜像 → npmmirror 二进制 → 官方脚本三级回退）+ Bun registry 配置
+7. 通过 Bun 安装 OpenCode
+8. 安装 oh-my-openagent 插件 + omo 模型路由补丁（子代理跟随主配置，双副本补打）；`SUPERPOWERS_ROUTER=1` 时另行克隆 vault 并部署 sp-router 插件
+9. GSD Core 工作流（默认跳过，`INSTALL_GSD=1` 选装）
+10. 安装 CodeGraph CLI 并注册 MCP（绝对路径，安装失败自动跳过注册）
+11. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
+
+    步骤 11 与 12 之间另有两个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）与 MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）。两者默认跳过，见下文对应小节。
+
+12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
 
 ### 自定义路径
 
@@ -95,20 +104,22 @@ export NPM_REGISTRY=https://registry.npmjs.org
 
 node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按架构自动选择），下载失败自动回退 nodesource 系统包。pip 缺失时用 `ensurepip` 引导（失败则提示手动安装，不写入配置），仅当 pip 可用时才写入中科大 PyPI 源（`~/.config/pip/pip.conf`，兼容 `~/.pip/pip.conf`）。
 
-### apt 源优化控制
+### 安装选项与环境变量
 
-apt 源测速默认执行：官方源最快则保持不动；若源文件已自定义（非官方域名）则跳过，避免覆盖手动配置。可用环境变量控制：
+全部开关一览（默认值均为关闭）：
 
 ```bash
-export INSTALL_GSD=1          # 安装 GSD 工作流（默认跳过，见下文选装说明）
+export INSTALL_GSD=1          # 选装 GSD 工作流（默认跳过，见下文选装说明）
 export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
 export INSTALL_MINERU=1       # 选装 MinerU 文档解析·本地档（免费无限量，Apache-2.0，见「MinerU 文档解析」小节；轻量可用 Flash MCP 免装）
+export SUPERPOWERS_ROUTER=1   # 启用 superpowers 路由模式（渐进披露替代官方急加载，见「superpowers 路由模式」小节）
+export SKIP_SECURITY=1        # 跳过步骤 12 安全与能力增强
 export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
 export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）
 ./setup-opencode.sh
 ```
 
-切换前自动备份原文件为 `sources.list.bak`；`apt-get update` 失败时提示还原命令。
+apt 源测速默认执行：官方源最快则保持不动；若源文件已自定义（非官方域名）则跳过，避免覆盖手动配置。切换前自动备份原文件为 `sources.list.bak`；`apt-get update` 失败时提示还原命令。另有 `OPENCODE_CONFIG_DIR`/`CLAUDE_CONFIG_DIR`/`NPM_REGISTRY`（见「自定义路径」「自定义 npm 镜像源」小节）与 `OMO_MODEL`（覆盖子代理默认模型）不在上表，按需单独设置。
 
 ### 备份
 
@@ -199,16 +210,20 @@ INSTALL_MINERU=1 ./setup-opencode.sh
 
 ### superpowers 路由模式（可选，`SUPERPOWERS_ROUTER=1`）
 
-官方 superpowers 插件急加载实测 **9.2k token/对话起步税**（20 技能描述进 system prompt + using-superpowers 全文进首消息）。路由模式换为渐进披露：
+官方 superpowers 插件急加载实测 **9.2k token/对话起步税**（20 技能描述进 system prompt + using-superpowers 全文进首条消息）。路由模式换为渐进披露：首条消息只注入路由块（强制扫描纪律两行 + 候选清单），agent 命中场景时 `Read` vault 里的技能正文。
 
 ```bash
 SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
 ```
 
-- 首条消息只注入 ~400 token 能力清单，agent 命中场景时 `Read` vault 里的技能正文
-- 实测：微任务基线 **936 token（−90%）**，调试任务路由触发与技能遵循正常
-- 取舍：硬约束换发现性（详见 `router-modules/README.md` 诚实边界）
-- 已装用户切换见 `router-modules/README.md`
+插件有两种形态（组件与实验细节见 `router-modules/README.md`）：
+
+- **v1 全量目录——setup 部署的实际形态**：注入纪律两行 + 20 技能一行清单 + using-superpowers 兜底指路。setup 只部署插件单文件（`sp-router.ts`），`matcher.mjs`/`index.yaml` 未随附，v2 检索层加载失败自动回退本形态（fail-open，能力零丢失）。旧环境实测微任务基线 936 token（−90%）。
+- **v2 top-3 检索——组件齐备时的插件默认**：matcher 按信号词对首条消息撒种排序，注入 top-3 候选（含命中词）+ 兜底行（候选不覆盖时读全量索引匹配）。激活需手动把 `matcher.mjs`/`index.yaml` 拷到 `~/.config/opencode/plugins/`；`SP_ROUTER_V1=1` 可显式锁回 v1 纯目录。
+
+**token 口径（B 轮实测，`benchmarks/terminal-bench/sp-router-ab.md`）**：注入块本身 v1 ≈0.75k / v2 ≈0.3k（省约 60%）；但端到端会话总量 v2 可能反超 v1——模型按纪律先 `Read` 候选技能正文再行动（实测 4/10 句触发，每句约 +9k），逐句均值 v2 11.4k vs v1 8.9k，中位数口径 v2 反而便宜 5.6%。渐进披露是把目录税换成按需正文税，不是单向省。
+
+**实验终局**：预注册判决实验两轮（A 轮检索层缺陷致 FAIL；B 轮修复后 v2 端到端准确率 10/10 ≥ v1 的 9/10，但 token 判据结构性不可达——门槛低于无插件共享基座本身），终局 FAIL，路由日志/夜间审计等后续计划搁置。模式保留为选装，不再迭代；已装用户切换步骤见 `router-modules/README.md`。
 
 ### C 方向集成模块（`c-modules/`，手动运行）
 
@@ -222,7 +237,7 @@ bash c-modules/c-modules-setup.sh --all   # 装 mem0 + SkillOpt
 ### 仓库新增目录
 
 ```
-router-modules/  ←  上下文优化（sp-router：superpowers 渐进披露，-90% 起步 token）
+router-modules/  ←  上下文优化（sp-router：superpowers 渐进披露路由插件 + 信号索引/校验器/种子生成器，见 router-modules/README.md）
 a-modules/       ←  A 方向联网认知（webmap CLI：llms.txt 站点文档装成 skill，3S 护栏）
 b-modules/       ←  B 方向环境感知（opencode-env 插件 + env-profile.sh）
 c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 安装器 + self-portrait）
