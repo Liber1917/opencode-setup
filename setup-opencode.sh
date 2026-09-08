@@ -412,7 +412,10 @@ if ! command -v unzip &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
   if command -v apt-get &> /dev/null; then
     apt_ensure_update
-    timeout -s KILL 300 $SUDO apt-get install -y unzip
+    # 判定以 unzip 实际在场为准,不以 apt 退出码为准(oct 实测: 包装进程被信号杀,
+    # 但 apt 已完成安装,按退出码判死会误杀整个 setup);失败重试一次再复核
+    timeout -s KILL 300 $SUDO apt-get install -y unzip || \
+      timeout -s KILL 300 $SUDO apt-get install -y unzip || true
   elif command -v yum &> /dev/null; then
     $SUDO yum install -y unzip
   elif command -v brew &> /dev/null; then
