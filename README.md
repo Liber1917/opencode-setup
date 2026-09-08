@@ -133,7 +133,7 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 
 | 模块 | 功能 | 用法 |
 |---|---|---|
-| `gen-permissions.sh` | 权限红线（三档模板：交互版 59 条 bash 规则：14 deny / 6 ask / 39 常用 allow；无头版 8 条红线；沙箱版网络红线，见下小节） | 重新生成：`bash gen-permissions.sh`（无头：`--headless`；沙箱：`--sandbox`） |
+| `gen-permissions.sh` | 权限红线（三档模板：交互版 59 条 bash 规则：14 deny / 6 ask / 39 常用 allow；无头版 7 条红线；沙箱版网络红线，见下小节） | 重新生成：`bash gen-permissions.sh`（终端上问标准/沙箱档；无头：`--headless`；沙箱：`--sandbox`） |
 | `audit-init.sh` | 审计模块（JSONL + 密钥脱敏 + 熔断器 + 30 天轮转） | 初始化：`bash audit-init.sh`；轮转：`bash audit-init.sh --rotate` |
 | `security-check.sh` | 安全自检（密钥治理/offline/provenance/注入扫描）+ AGENT-CARD 生成 | 装完跑一次：`bash security-check.sh`；开 offline：`bash security-check.sh --offline` |
 | `gen-compliance.sh` | 合规文档（CN/EU 双地区，provider 数据流向清单） | `bash gen-compliance.sh --region cn` |
@@ -142,15 +142,17 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 
 ### 权限模板三档（交互 / 无头 / 沙箱）
 
-`gen-permissions.sh` 支持三档权限模板，deny 面与适用场景各不相同：
+`gen-permissions.sh` 支持三档权限模板，deny 面与适用场景各不相同。默认调用（不带 flag）在交互终端上会先问权限档位（`1 标准` / `2 沙箱`，回车=标准，详见小节末）：
 
 | 档位 | 生成参数 | deny 面 | ask 面 | 适用场景 |
 |---|---|---|---|---|
-| 交互版（默认） | `bash gen-permissions.sh` | 14 条：本机破坏类（`rm -rf`/`mkfs`/`dd`/`chmod 777`/`git reset --hard`/`crontab -r`/`sudo rm` 等）+ 网络不可逆类（force-push/`curl\|sh`/authorized_keys 持久化） | 6 条（`git push`/`npm publish`/`docker push`/`gh release create`/`gh pr merge`/webfetch） | 本机日常开发，高风险操作弹窗确认 |
-| 无头版 | `--headless` | 8 条红线（本机破坏 + 网络不可逆并集） | 0（其余全 allow） | benchmark/CI 无头跑，红线外全放行 |
+| 交互版（默认） | `bash gen-permissions.sh`（终端问档位，回车=标准） | 14 条：本机破坏类（`rm -rf`/`mkfs`/`dd`/`chmod 777`/`git reset --hard`/`crontab -r`/`sudo rm` 等）+ 网络不可逆类（force-push/`curl\|sh`/authorized_keys 持久化） | 6 条（`git push`/`npm publish`/`docker push`/`gh release create`/`gh pr merge`/webfetch） | 本机日常开发，高风险操作弹窗确认 |
+| 无头版 | `--headless` | 7 条红线（本机破坏类 + 网络不可逆类子集） | 0（其余全 allow） | benchmark/CI 无头跑，红线外全放行 |
 | 沙箱版 | `--sandbox` | 6 条网络不可逆类：force-push ×2、`curl\|sh`、`wget\|sh`、authorized_keys 凭据持久化、`gh release create` | 0（docker/pip/npm 等全走 `"*": "allow"` 兜底） | 一次性容器/VM 等本机破坏可复原的隔离环境，免手动点弹窗 |
 
 沙箱档设计裁定：**隔离挡得住本机破坏，挡不住网络不可逆**——本机破坏类 deny 被删（容器/VM 边界已覆盖，可复原），网络不可逆类 deny 保留。`gh release create` 归 deny 而非 ask：沙箱档 ask 归零无中间态，而发布一旦触发通知/外部镜像抓取，事后删除收不回已分发产物，按"网络不可逆"标准与 force-push 同类。**沙箱档不是全 bypass**——网络红线仍在。
+
+默认调用（无 flag、无环境变量）在交互终端上会先问权限档位：选 `1` 或回车=标准档（交互版 59 条），选 `2`=沙箱档（与 `--sandbox` 产物等价）；非法输入提示重输，连续 3 次后按标准档继续。非交互调用（管道、`curl | bash`、无头 CI 等 `[ -t 0 ]` 为假的环境）不问不读，直接标准档，行为与历史版本零差异。setup 步骤 12 经命令替换调用本脚本（stdout/stderr 重定向 `/dev/null`、stdin 未重定向）：交互装机时问句照常出现（提示走 `/dev/tty`，重定向下仍可见），管道装机不触发。
 
 容器/CI 中可免改脚本直选档位：`PERMISSION_MODE=sandbox bash setup-opencode.sh`（`PERMISSION_MODE=headless` 同理，经 `gen-permissions.sh` 生效，与对应 flag 等价）。
 

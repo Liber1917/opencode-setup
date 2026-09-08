@@ -8,8 +8,10 @@
 #      (无头模式 ask=auto-reject, 原交互红线会导致 agent 寸步难行)
 # 用法: gen-permissions.sh [--headless|--sandbox] [输出路径]
 # 三档模板:
-#   (默认)     交互版 — 本机开发: 59 条规则(14 deny/6 ask/39 allow), 高风险弹窗确认
-#   --headless 无头版 — benchmark/CI: 8 条红线 deny + 其余全 allow
+#   (默认)     交互选档 — 终端([ -t 0 ])上先问权限档位: 1 标准(=交互版 59 条:
+#              14 deny/6 ask/39 allow, 高风险弹窗确认) / 2 沙箱; 回车/非法×3
+#              =标准档。非交互(管道/curl|bash/无头 CI)不问, 直接标准档, 零变化。
+#   --headless 无头版 — benchmark/CI: 7 条红线 deny + 其余全 allow
 #   --sandbox  沙箱版 — 一次性容器/VM 等本机破坏可复原的隔离环境:
 #              删本机破坏类 deny(隔离边界已覆盖), 保留网络不可逆类 deny
 #              (隔离挡得住本机破坏, 挡不住网络不可逆), ask 归零
@@ -29,8 +31,10 @@ for a in "$@"; do
 用法: gen-permissions.sh [--headless|--sandbox] [输出路径]
 
 模板三档:
-  (默认)      交互版 — 本机日常开发, 高风险操作 ask 弹窗确认 (59 条: 14 deny/6 ask/39 allow)
-  --headless  无头版 — benchmark/CI 无头跑, 8 条红线 deny + 其余全 allow
+  (默认)      交互选档 — 终端上问权限档位: 1 标准(=交互版 59 条: 14 deny/
+              6 ask/39 allow, 高风险弹窗确认) / 2 沙箱; 回车/非法×3=标准档;
+              非交互(管道)不问, 直落标准档, 零行为变化
+  --headless  无头版 — benchmark/CI 无头跑, 7 条红线 deny + 其余全 allow
   --sandbox   沙箱版 — 容器/隔离环境, 删本机破坏类红线(隔离已覆盖),
               保留网络不可逆红线(隔离挡不住网络), ask 归零免手动点; 不是全 bypass
 
@@ -44,6 +48,41 @@ case "$MODE" in
   interactive|headless|sandbox) ;;
   *) echo "错误: 未知 PERMISSION_MODE='$MODE' (合法值: headless|sandbox; 留空=交互版)" >&2; exit 1 ;;
 esac
+
+# ── 交互档位问句(仅默认档 + 终端 stdin)────────────────────────────
+# setup-opencode.sh 步骤12 经命令替换调用本脚本: stdout/stderr 被重定向到
+# /dev/null 但 stdin 未重定向——交互装机时问句照常触发, 提示因此写
+# /dev/tty(重定向下仍可见), 输入读 stdin(同一终端)。
+# 非交互(管道/curl|bash/docker -i 无 -t): [ -t 0 ] 为假, 不问不读,
+# 直接标准档, 与历史版本零差异。
+if [ "$MODE" = "interactive" ] && [ -t 0 ]; then
+  TTY_OUT=/dev/stderr
+  if [ -w /dev/tty ]; then TTY_OUT=/dev/tty; fi
+  tries=0
+  while :; do
+    printf '═══ 权限档位 ═══\n 1. 标准 — 未知命令弹窗(日常开发,默认)\n 2. 沙箱 — 免 docker/pip 弹窗;删本机红线,留网络红线(容器/VM 等可复原环境)\n选择 [1]: ' > "$TTY_OUT"
+    if ! IFS= read -r ans; then ans=""; break; fi    # EOF(如 Ctrl-D)→ 标准档
+    ans=$(printf '%s' "$ans" | tr -d '[:space:]')
+    case "$ans" in
+      ""|1) break ;;
+      2) MODE=sandbox; break ;;
+      *)
+        tries=$((tries+1))
+        if [ "$tries" -ge 3 ]; then
+          printf '连续 3 次无效输入, 按标准档继续\n' > "$TTY_OUT"
+          break
+        fi
+        printf '无效输入: %s(请输入 1 或 2, 回车=标准)\n' "$ans" > "$TTY_OUT"
+        ;;
+    esac
+  done
+  if [ "$MODE" = "sandbox" ]; then
+    printf '→ 沙箱档: 删本机红线, 留网络红线(docker/pip 免弹窗)\n' > "$TTY_OUT"
+  else
+    printf '→ 标准档\n' > "$TTY_OUT"
+  fi
+fi
+
 [ -z "$OUT" ] && OUT=/dev/stdout
 
 case "$MODE" in
