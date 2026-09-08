@@ -77,7 +77,7 @@ echo ""
 # 确保 curl（下载依赖）；缺失时尝试 apt 安装，失败仅提示
 if ! command -v curl &> /dev/null; then
   echo -e "${YELLOW}⚠ curl 未安装，尝试安装...${NC}"
-  if command -v apt-get &> /dev/null && apt-get update >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1; then
+  if command -v apt-get &> /dev/null && timeout -s KILL 120 apt-get update >/dev/null 2>&1 && timeout -s KILL 120 apt-get install -y curl >/dev/null 2>&1; then
     echo -e "${GREEN}✓ curl 已安装${NC}"
   else
     echo -e "${YELLOW}⚠ curl 安装失败，后续下载步骤可能不可用${NC}"
@@ -377,10 +377,13 @@ else
           $SUDO sed -i "s|//archive\.ubuntu\.com|//$BEST_MIRROR|g; s|//security\.ubuntu\.com|//$BEST_MIRROR|g" "$APT_SOURCES"
           echo -e "${GREEN}✓ 已切换至 $BEST_MIRROR ($((BEST_SPEED / 1024)) KB/s)${NC}"
           echo -e "${BLUE}  原文件已备份: ${APT_SOURCES}.bak${NC}"
-          if $SUDO apt-get update >/dev/null 2>&1; then
+          # 真实机器常带第三方源(PPA/docker 等),apt 无超时会无限挂起(2026-09-08 jammy 实测)
+          if timeout -s KILL 180 $SUDO apt-get update >/dev/null 2>&1; then
             echo -e "${GREEN}✓ apt update 验证通过${NC}"
           else
-            echo -e "${YELLOW}⚠ apt update 失败，请手动还原(命令): sudo cp ${APT_SOURCES}.bak $APT_SOURCES${NC}"
+            echo -e "${YELLOW}⚠ apt update 验证失败/超时，已自动还原原源${NC}"
+            $SUDO cp "${APT_SOURCES}.bak" "$APT_SOURCES" 2>/dev/null || true
+            echo -e "${YELLOW}  (原源仍可用;如需重试: 跳过本步 SKIP_APT_MIRROR=1,稍后手动 apt-get update 排查第三方源)${NC}"
           fi
         fi
       else
