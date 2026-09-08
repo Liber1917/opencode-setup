@@ -26,8 +26,8 @@ install_mem0() {
   else
     echo "  ⚠ 无 npm, 可用 pip: pip install mem0-cli"
   fi
-  echo "  初始化: mem0 init --agent --agent-caller opencode(需注册, 可选)"
-  echo "  用法: mem0 add '偏好' / mem0 search '查询'"
+  echo "  初始化(免注册,Agent Mode 自助签发免费 key): mem0 init --agent --agent-caller opencode"
+  echo "  用法: mem0 add '偏好' / mem0 search '查询';数据默认存 mem0 云,自托管可设 MEM0_BASE_URL"
 }
 
 install_skillopt() {

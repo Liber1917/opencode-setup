@@ -281,7 +281,8 @@ SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
 
 装 **mem0 + SkillOpt 双通道**（复用 `c-modules/c-modules-setup.sh --all` 装器，不重复实现）：
 
-- **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'` / `mem0 search '查询'`；装完需配置 `MEMO_API_KEY` 后可用（`export` 或写 `~/.bashrc`）
+- **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'` / `mem0 search '查询'`
+- mem0 初始化免注册：`mem0 init --agent --agent-caller opencode`（免费档无卡；云端存储，自托管可设 `MEM0_BASE_URL`）
 - **通道② 流程改进** → [SkillOpt-Sleep](https://github.com/microsoft/SkillOpt)（MIT）：`skillopt-sleep` 扫 OpenCode 会话 → 提炼 → 验证门控 → 落草稿区待审
 
 ```bash

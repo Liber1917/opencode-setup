@@ -1148,7 +1148,7 @@ else
     echo "  正在安装 mem0 + SkillOpt 双通道(c-modules-setup --all)..."
     if bash "$SCRIPT_DIR/c-modules/c-modules-setup.sh" --all; then
       CMODULES_INSTALLED=1
-      echo -e "${BLUE}  - mem0 需配置 MEMO_API_KEY 后可用(export 或写 ~/.bashrc)${NC}"
+      echo -e "${BLUE}  - mem0 初始化免注册: mem0 init --agent --agent-caller opencode(Agent Mode 自助签发免费 key;数据默认存 mem0 云,自托管可设 MEM0_BASE_URL)${NC}"
       echo -e "${BLUE}  - 契约: 产物只落 skill-drafts/,人工批准(移入 skills/)才生效——自进化无自动生效路径${NC}"
     else
       echo -e "${YELLOW}  ⚠ c-modules 装器执行失败, 可手动重试: bash c-modules/c-modules-setup.sh --all${NC}"
