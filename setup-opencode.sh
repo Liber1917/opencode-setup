@@ -124,13 +124,13 @@ step_end 1 "检测已有配置"
 # 门(任一命中即跳过,直接走环境变量语义):
 #   ① SETUP_INTERACTIVE=0 强制关菜单(最高优先级)
 #   ② 任一选装变量(INSTALL_GSD/INSTALL_DCP/INSTALL_MINERU/SUPERPOWERS_ROUTER/
-#      CONFIRM_AGPL)已在环境中显式设置——用户已给路径,不打扰
+#      INSTALL_CMODULES/CONFIRM_AGPL)已在环境中显式设置——用户已给路径,不打扰
 #   ③ 非交互终端([ -t 0 ] 为假: curl|bash 管道/CI)——行为与历史版本完全一致;
 #      SETUP_FORCE_MENU=1 为无 TTY 调试入口(供回归测试从 stdin 喂输入)
 # ------------------------------------------------------------------
 interactive_component_menu() {
   [ "${SETUP_INTERACTIVE:-1}" = "0" ] && return 0
-  [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${CONFIRM_AGPL:-}" ] && return 0
+  [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${INSTALL_CMODULES:-}${CONFIRM_AGPL:-}" ] && return 0
   if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
     return 0
   fi
@@ -143,6 +143,7 @@ interactive_component_menu() {
   echo " 2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)"
   echo " 3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)"
   echo " 4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)"
+  echo " 5. 记忆/自进化     [ ] mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)"
   echo -e "${YELLOW}───────────────────────────────────${NC}"
   echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
 
@@ -158,14 +159,14 @@ interactive_component_menu() {
     picks=""
     for sel in $answer; do
       case "$sel" in
-        1|2|3|4) picks="$picks$sel " ;;
+        1|2|3|4|5) picks="$picks$sel " ;;
         *) ok=0 ;;
       esac
     done
     [ "$ok" = "1" ] && break
     picks=""                      # 非法轮次丢弃残留选择("1 x" 不留 1)
     if [ "$attempt" -lt 3 ]; then
-      echo -e "${YELLOW}  ⚠ 无效输入 \"${answer}\"(合法: 1-4,空格分隔),请重输(${attempt}/3)${NC}"
+      echo -e "${YELLOW}  ⚠ 无效输入 \"${answer}\"(合法: 1-5,空格分隔),请重输(${attempt}/3)${NC}"
       echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
     else
       echo -e "${YELLOW}  ⚠ 连续 3 次无效输入,按全不装继续${NC}"
@@ -180,6 +181,7 @@ interactive_component_menu() {
       2) INSTALL_DCP=1;        names="${names:+$names, }DCP" ;;
       3) INSTALL_MINERU=1;     names="${names:+$names, }MinerU" ;;
       4) SUPERPOWERS_ROUTER=1; names="${names:+$names, }superpowers路由" ;;
+      5) INSTALL_CMODULES=1;   names="${names:+$names, }记忆/自进化" ;;
     esac
   done
   echo ""
@@ -192,6 +194,9 @@ interactive_component_menu() {
   echo ""
   return 0
 }
+# 区分 INSTALL_CMODULES 来源: 环境显式给定(按非交互铁律,装完不问定时,只打印
+# 开启命令) vs 菜单选中(装完且 [ -t 0 ] 时交互问)——须在菜单调用前捕获
+INSTALL_CMODULES_PRESET="${INSTALL_CMODULES:-0}"
 interactive_component_menu
 
 step_begin
@@ -1130,6 +1135,55 @@ else
 fi
 
 # ------------------------------------------------------------------
+# 记忆/自进化双通道(选装, INSTALL_CMODULES=1 启用; 不占步骤号)
+# 复用 c-modules/c-modules-setup.sh 装器(--all = mem0+SkillOpt),不重复实现。
+# 夜间自进化定时任务仅在两条路都真时交互问: 菜单选中(非环境变量预设) + [ -t 0 ];
+# 环境变量路径按非交互铁律不问、默认不开启、只打印开启命令一行。
+# ------------------------------------------------------------------
+if [ "${INSTALL_CMODULES:-0}" != "1" ]; then
+  echo -e "${BLUE}  - 记忆/自进化: 已跳过(INSTALL_CMODULES=1 或菜单选 5 可启用, 见 README)${NC}"
+else
+  CMODULES_INSTALLED=0
+  if [ -f "$SCRIPT_DIR/c-modules/c-modules-setup.sh" ]; then
+    echo "  正在安装 mem0 + SkillOpt 双通道(c-modules-setup --all)..."
+    if bash "$SCRIPT_DIR/c-modules/c-modules-setup.sh" --all; then
+      CMODULES_INSTALLED=1
+      echo -e "${BLUE}  - mem0 需配置 MEMO_API_KEY 后可用(export 或写 ~/.bashrc)${NC}"
+      echo -e "${BLUE}  - 契约: 产物只落 skill-drafts/,人工批准(移入 skills/)才生效——自进化无自动生效路径${NC}"
+    else
+      echo -e "${YELLOW}  ⚠ c-modules 装器执行失败, 可手动重试: bash c-modules/c-modules-setup.sh --all${NC}"
+    fi
+  else
+    echo -e "${YELLOW}  ⚠ 未找到 c-modules/c-modules-setup.sh(源码仓库外运行?)——跳过记忆/自进化${NC}"
+  fi
+
+  CMODULES_CRON_LINE='0 3 * * * skillopt-sleep >> ~/.config/opencode/skill-drafts/sleep.log 2>&1'
+  if [ "$CMODULES_INSTALLED" = "1" ] && [ "$INSTALL_CMODULES_PRESET" != "1" ] && [ -t 0 ]; then
+    echo -n "  是否开启夜间自进化定时任务? (每晚 03:00 扫当天会话→提炼→验证门控→落草稿区待审) [y/N]: "
+    cmodules_cron=""
+    read -r cmodules_cron || cmodules_cron=""
+    echo ""
+    if [[ "$cmodules_cron" =~ ^[Yy]$ ]]; then
+      if ! command -v crontab >/dev/null 2>&1; then
+        echo -e "${YELLOW}  ⚠ crontab 不可用,手动开启: crontab -e 加行:${NC}"
+        echo "    $CMODULES_CRON_LINE"
+      elif crontab -l 2>/dev/null | grep -F 'skillopt-sleep' >/dev/null 2>&1; then
+        echo -e "${GREEN}  ✓ 夜间自进化定时任务已存在(幂等,不重复添加)${NC}"
+      elif { crontab -l 2>/dev/null || true; echo "$CMODULES_CRON_LINE"; } | crontab - 2>/dev/null; then
+        echo -e "${GREEN}  ✓ 夜间自进化定时任务已写入 crontab(每晚 03:00,日志 ~/.config/opencode/skill-drafts/sleep.log)${NC}"
+      else
+        echo -e "${YELLOW}  ⚠ crontab 写入失败,手动开启: crontab -e 加行:${NC}"
+        echo "    $CMODULES_CRON_LINE"
+      fi
+    else
+      echo -e "${BLUE}  - 未开启(默认);手动开启: crontab -e 加行 '${CMODULES_CRON_LINE}'${NC}"
+    fi
+  else
+    echo -e "${BLUE}  - 夜间自进化默认未开启;开启命令: crontab -e 加行 '${CMODULES_CRON_LINE}'${NC}"
+  fi
+fi
+
+# ------------------------------------------------------------------
 # 步骤 12: 安全/能力增强模块(可选, SKIP_SECURITY=1 跳过)
 # 依据 spec: E 方向六模块(权限红线/审计/安全自检/合规) + B 方向环境画像
 # e-modules/ 随仓库分发, 安装时部署到 CONFIG_DIR
@@ -1340,6 +1394,7 @@ EXTRAS_SUM=""
 [ "${INSTALL_GSD:-0}" = "1" ] && EXTRAS_SUM="GSD"
 [ "${INSTALL_MINERU:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
 [ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
+[ "${INSTALL_CMODULES:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }记忆/自进化"
 # DCP 存在"选中但 AGPL 门拒绝"中间态,以实际注册结果为准(与其安装段同一判据)
 if [ "${INSTALL_DCP:-0}" = "1" ] && grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
   EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }DCP"

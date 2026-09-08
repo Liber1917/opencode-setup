@@ -35,6 +35,7 @@ cd opencode-setup
 - **DCP 上下文压缩（选装）** — `INSTALL_DCP=1`（AGPL-3.0 需双重知会确认）；长会话上下文锯齿式回落，实测末态 -82%、计费当量 -43%
 - **MinerU 文档解析（选装）** — `INSTALL_MINERU=1` 本地档免费无限量（PDF/图片 → Markdown/JSON）；轻量走 Flash MCP 免装
 - **superpowers 路由模式（选装）** — `SUPERPOWERS_ROUTER=1` 渐进披露替代官方急加载（v1 全量目录 / v2 top-3 检索双形态）
+- **记忆/自进化（选装）** — `INSTALL_CMODULES=1` 或菜单选 `5`：mem0 偏好记忆 + SkillOpt 夜间提炼双通道；提炼产物只落草稿区，人工批准才生效（无自动生效路径）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
 
@@ -48,6 +49,8 @@ cd opencode-setup
 ├── node_modules/           ←  oh-my-openagent（官方模式下另有 superpowers 插件）
 ├── plugins/                ←  rtk.ts（命令输出压缩）/ opencode-env.ts（步骤 12）/ sp-router.ts（SUPERPOWERS_ROUTER=1）
 ├── command/                ←  GSD Core 命令（INSTALL_GSD=1 时存在）
+├── memory/                 ←  mem0 偏好记忆（INSTALL_CMODULES=1 时创建）
+├── skill-drafts/           ←  SkillOpt 夜间提炼草稿区（INSTALL_CMODULES=1 时创建；人工批准后移入 skills/）
 ├── skills/                 ←  技能目录（步骤 12 部署 preset-skills）
 ├── sp-vault/               ←  superpowers-zh 克隆（SUPERPOWERS_ROUTER=1 时存在，更新 = git pull）
 ├── AGENT-CARD.md           ←  Agent 环境披露（步骤 12 生成）
@@ -79,13 +82,13 @@ cd opencode-setup
 10. 安装 CodeGraph CLI 并注册 MCP（绝对路径，安装失败自动跳过注册）
 11. 安装 RTK（镜像链下载，集成 OpenCode 插件，自动关闭遥测）
 
-    步骤 11 与 12 之间另有两个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）与 MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）。两者默认跳过，见下文对应小节。
+    步骤 11 与 12 之间另有三个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）、MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）与记忆/自进化双通道（`INSTALL_CMODULES=1`，装完交互问是否开启夜间自进化定时任务）。三者默认跳过，见下文对应小节。
 
 12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
 
 ### 交互式选装菜单
 
-在交互终端直接运行（且未设置任何选装环境变量）时，步骤 1 之后会弹出安装向导式选装菜单，把 GSD/DCP/MinerU/superpowers 路由四个选装项一次选完：
+在交互终端直接运行（且未设置任何选装环境变量）时，步骤 1 之后会弹出安装向导式选装菜单，把 GSD/DCP/MinerU/superpowers 路由/记忆自进化五个选装项一次选完：
 
 ```text
 ═══════════════════════════════════
@@ -95,19 +98,21 @@ cd opencode-setup
  2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)
  3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)
  4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)
+ 5. 记忆/自进化     [ ] mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)
 ───────────────────────────────────
  输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装):
 ```
 
-- 输入编号**空格分隔**（`1 3` = GSD + MinerU），回车确认；**直接回车 = 全不装**（与历史默认一致）
+- 输入编号**空格分隔**（`1 3` = GSD + MinerU，`5` = 记忆/自进化），回车确认；**直接回车 = 全不装**（与历史默认一致）
 - 非法输入提示重输，最多 3 次，超限自动按全不装继续（不会卡死安装）
 - 选中 `2`（DCP）只代表进入安装段，**AGPL-3.0 确认门仍在安装时进行**——菜单不绕过 `CONFIRM_AGPL`
+- 选中 `5`（记忆/自进化）装完后会交互问是否开启夜间自进化定时任务（答 `y` 才写 crontab；见「记忆/自进化」小节）
 - 选中后回显（如 `→ 将安装: GSD, MinerU`），收尾汇总输出「已装组件(选装)」行；菜单与环境变量设的是同一组开关，无第二套状态
 
 **菜单跳过条件**（优先级从高到低，任一命中即不出现菜单，直接走环境变量语义）：
 
 1. `SETUP_INTERACTIVE=0` —— 强制关闭菜单（最高优先级，交互终端也不弹）
-2. 已显式设置任一 `INSTALL_GSD` / `INSTALL_DCP` / `INSTALL_MINERU` / `SUPERPOWERS_ROUTER` / `CONFIRM_AGPL` —— 用户已给定路径，不打扰
+2. 已显式设置任一 `INSTALL_GSD` / `INSTALL_DCP` / `INSTALL_MINERU` / `SUPERPOWERS_ROUTER` / `INSTALL_CMODULES` / `CONFIRM_AGPL` —— 用户已给定路径，不打扰
 3. 非交互终端（`curl | bash` 管道、CI、`docker exec -i` 等 `[ -t 0 ]` 为假的环境）—— 自动跳过，**非交互行为与历史版本完全一致**
 
 调试/回归：`SETUP_FORCE_MENU=1` 可在无 TTY 时强制弹出菜单（输入改从 stdin 管道读取），用于测试菜单代码路径。
@@ -141,6 +146,7 @@ node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按�
 export INSTALL_GSD=1          # 选装 GSD 工作流（默认跳过，见下文选装说明）
 export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
 export INSTALL_MINERU=1       # 选装 MinerU 文档解析·本地档（免费无限量，Apache-2.0，见「MinerU 文档解析」小节；轻量可用 Flash MCP 免装）
+export INSTALL_CMODULES=1     # 选装记忆/自进化双通道（mem0+SkillOpt，见「记忆/自进化」小节；非交互不问定时，默认不开启）
 export SUPERPOWERS_ROUTER=1   # 启用 superpowers 路由模式（渐进披露替代官方急加载，见「superpowers 路由模式」小节）
 export SETUP_INTERACTIVE=0    # 强制关闭交互式选装菜单（设置任一上面的选装变量时菜单本就不出现，见「交互式选装菜单」小节）
 export SKIP_SECURITY=1        # 跳过步骤 12 安全与能力增强
@@ -271,14 +277,31 @@ SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
 
 **实验终局**：预注册判决实验两轮（A 轮检索层缺陷致 FAIL；B 轮修复后 v2 端到端准确率 10/10 ≥ v1 的 9/10，但 token 判据结构性不可达——门槛低于无插件共享基座本身），终局 FAIL，路由日志/夜间审计等后续计划搁置。模式保留为选装，不再迭代；已装用户切换步骤见 `router-modules/README.md`。
 
-### C 方向集成模块（`c-modules/`，手动运行）
+### 记忆/自进化（选装，`INSTALL_CMODULES=1` 或菜单选 `5`）
+
+装 **mem0 + SkillOpt 双通道**（复用 `c-modules/c-modules-setup.sh --all` 装器，不重复实现）：
+
+- **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'` / `mem0 search '查询'`；装完需配置 `MEMO_API_KEY` 后可用（`export` 或写 `~/.bashrc`）
+- **通道② 流程改进** → [SkillOpt-Sleep](https://github.com/microsoft/SkillOpt)（MIT）：`skillopt-sleep` 扫 OpenCode 会话 → 提炼 → 验证门控 → 落草稿区待审
 
 ```bash
-bash c-modules/c-modules-setup.sh --all   # 装 mem0 + SkillOpt
+INSTALL_CMODULES=1 ./setup-opencode.sh              # 菜单选 5 同效;交互终端装完会问定时
+bash c-modules/c-modules-setup.sh --all             # 或手动单独运行装器
 ```
 
-- **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'`
-- **通道② 流程改进** → [SkillOpt-Sleep](https://github.com/microsoft/SkillOpt)（MIT）：夜间自进化，提炼产物进草稿区，人工审批后生效
+**夜间自进化定时任务**（核心新增）：菜单选 `5` 的交互终端在装完后会问：
+
+```text
+是否开启夜间自进化定时任务? (每晚 03:00 扫当天会话→提炼→验证门控→落草稿区待审) [y/N]:
+```
+
+答 `y` 才写 crontab（幂等，已存在同命令不重复添加；crontab 不可用则打印手动 `crontab -e` 行）：
+
+```cron
+0 3 * * * skillopt-sleep >> ~/.config/opencode/skill-drafts/sleep.log 2>&1
+```
+
+**审批制契约（硬门）**：提炼产物只落 `skill-drafts/` 草稿区，人工批准（移入 `skills/`）才生效——**自进化无自动生效路径**。`INSTALL_CMODULES=1` 环境变量路径按非交互铁律不问定时问题、默认不开启，仅打印开启命令一行（防管道/CI 误写 crontab）。
 
 ### 仓库新增目录
 
@@ -286,7 +309,7 @@ bash c-modules/c-modules-setup.sh --all   # 装 mem0 + SkillOpt
 router-modules/  ←  上下文优化（sp-router：superpowers 渐进披露路由插件 + 信号索引/校验器/种子生成器，见 router-modules/README.md）
 a-modules/       ←  A 方向联网认知（webmap CLI：llms.txt 站点文档装成 skill，3S 护栏）
 b-modules/       ←  B 方向环境感知（opencode-env 插件 + env-profile.sh）
-c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 安装器 + self-portrait）
+c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 装器 + self-portrait；经菜单第 5 项/INSTALL_CMODULES=1 接入）
 d-modules/       ←  D 方向控制（opstate 声明式任务状态 + fetch-skills 指引）
 e-modules/       ←  E 方向安全模块（6 个脚本 + devcontainer）
 preset-skills/   ←  预设 skill（ai-communication 沟通协议）
