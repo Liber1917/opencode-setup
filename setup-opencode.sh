@@ -170,10 +170,13 @@ EOF
   # 显式 model 必须存在:fallbackChain patch 盖不住 category 解析路径,空配置会
   # 落到源码内置链(anthropic)→ 子代理 403 静默死(2026-08-30 实测坐实)。
   # 换模型: OMO_MODEL=<provider/model> 重跑,或直接编辑本文件。
+  # disabled_mcps: 禁 omo 内置白名单里的 grep_app(E-security spec 已记录移除,
+  # 职能被本地 AST+web 搜索替代)。opencode.json 侧从未注册过它,单侧禁用即净。
   OMO_MODEL="${OMO_MODEL:-zhipuai-coding-plan/glm-5.3}"
   cat > "$CONFIG_DIR/oh-my-openagent.json" << EOF
 {
   "\$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "disabled_mcps": ["grep_app"],
   "agents": {
     "hephaestus": {"model": "$OMO_MODEL"},
     "oracle": {"model": "$OMO_MODEL"},
@@ -216,6 +219,29 @@ EOF
     echo -e "${BLUE}  - settings.json 已存在，跳过${NC}"
   fi
   step_end 3 "生成配置文件"
+else
+  # 保留现有配置路径(非交互默认/交互选 n): 存量 oh-my-openagent.json 可能
+  # 无 disabled_mcps(E-security spec 记录的 grep_app 移除只落在开发者本机,
+  # setup 从未写盘)——python3 幂等合并: 现有列表 ∪ ["grep_app"],原子写
+  # tmp+rename,用户自设条目不覆盖;无 python3 则跳过并黄警。
+  if [ -f "$CONFIG_DIR/oh-my-openagent.json" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$CONFIG_DIR/oh-my-openagent.json" << 'PYEOF' \
+      && echo -e "${GREEN}  ✓ disabled_mcps 已含 grep_app(幂等合并,用户自设条目保留)${NC}" \
+      || echo -e "${YELLOW}  ⚠ disabled_mcps 合并失败(JSON 损坏?),文件保持原样${NC}"
+import json, os, sys
+p = sys.argv[1]
+with open(p) as f:
+    c = json.load(f)
+c["disabled_mcps"] = sorted(set(c.get("disabled_mcps", [])) | {"grep_app"})
+tmp = p + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(c, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, p)
+PYEOF
+  elif [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
+    echo -e "${YELLOW}  ⚠ 无 python3,跳过 disabled_mcps 幂等合并(建议安装后重跑)${NC}"
+  fi
 fi
 
 # ------------------------------------------------------------------
