@@ -796,7 +796,10 @@ if [ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && [ -f "$SCRIPT_DIR/router-modules/sp-r
       || echo -e "${YELLOW}⚠ vault 克隆失败,sp-router 将无技能可读${NC}"
   fi
   mkdir -p "$CONFIG_DIR/plugins"
+  # v2 三件套(plugin+matcher+index),缺伴文件则插件降级 v1(oct 实测教训)
   sed "s|__SP_VAULT__|$SP_VAULT/skills|g" "$SCRIPT_DIR/router-modules/sp-router/plugin.js" > "$CONFIG_DIR/plugins/sp-router.ts"
+  cp "$SCRIPT_DIR/router-modules/sp-router/matcher.mjs" "$CONFIG_DIR/plugins/matcher.mjs"
+  cp "$SCRIPT_DIR/router-modules/sp-router/index.yaml" "$CONFIG_DIR/plugins/index.yaml"
   echo -e "${GREEN}✓ sp-router 已部署 → plugins/sp-router.ts(渐进披露,实测 -90% 起步 token)${NC}"
 fi
 
