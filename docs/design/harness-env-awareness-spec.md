@@ -339,7 +339,7 @@ webmap(自研, MIT 干净, 仿 llmstxt-cli 命令形态):
 2. **语言覆盖是 codegraph 硬门槛**:bash/md 仓库零能力(opencode-setup 实测 0 节点)——**preset 部署时应检测项目语言再决定注册**;graphify 语言面宽(bash/md 均可)但代码符号定位弱且有整文件盲区(redis ae.c/config.c 缺席)
 3. **成本模型**:codegraph 建图免费;graphify 全量含 deepseek 文档语义 pass($0.09-0.10/仓)——**graphify 按需建图,不常驻**
 4. **共存与冲突**:双工具可共存(路由层实测 agent 自主选择,无打架);graphify **strict 模式禁用**(避免与 codegraph 引导/CodegraphFragment 形成"双先查我"门禁冲突)
-5. grep_app 已移除(omo disabled_mcps;其"远程 GitHub 代码搜索"职能 2026 年已非主流,被本地 AST+web 搜索替代)
+5. grep_app 已移除(自主决策,非上游跟进)。上游核验(2026-09-08): omo 现名 code-yeongyu/oh-my-openagent,McpNameSchema 白名单(4.19.4 与 5.0 beta 均含 grep_app)且 grep-app.ts 硬编码 enabled:true/README 标注 Always on/grep.app 服务存活/无移除讨论——"上游已替代"不成立,上游把本地 AST(ast-grep/LSP/codegraph)做成增量而非替代。保留弃用的真实理由: 免费基本盘收敛(远程 GitHub 检索由 gh CLI/API+web 搜索覆盖,zai MCP 侧另有同职能),减小远程依赖面。上游证据: packages/omo-opencode/src/mcp/grep-app.ts@dev
 
 ### 待纳入 skill 清单(已评审通过,等部署机制)
 
