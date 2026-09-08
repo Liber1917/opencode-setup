@@ -1279,6 +1279,16 @@ PYEOF
     echo -e "${YELLOW}  ⚠ 审计模块初始化失败(可手动运行 $MOD_DIR/audit-init.sh)${NC}"
   fi
 
+  # ②b 出环硬门控(evidence-gated completion, AGENTS.md 在场守则的机器执行层)
+  #    挂载形态依据: opencode 1.18.29 config schema 无 event 键,TUI/run 双实测
+  #    event 命令不触发,无 Stop/session.idle 等价事件 → /completion-gate 斜杠命令形态
+  if [ -f "$MOD_DIR/completion-gate.sh" ] && [ -f "$SCRIPT_DIR/e-modules/completion-gate.md" ]; then
+    mkdir -p "$CONFIG_DIR/commands"
+    cp "$SCRIPT_DIR/e-modules/completion-gate.md" "$CONFIG_DIR/commands/completion-gate.md"
+    echo -e "${GREEN}  ✓ 出环硬门控已部署——宣称完成前跑 /completion-gate(check 阻断,report 仅报告)${NC}"
+    echo -e "${BLUE}    用法: $MOD_DIR/completion-gate.sh check|report [workdir](双控实证假成功 44-52%→3%)${NC}"
+  fi
+
   # ③ 安全自检 + AGENT-CARD
   set +e; SEC_OUT=$(cd "$HOME" && "$MOD_DIR/security-check.sh" 2>&1); SEC_RC=$?; set -e
   echo "$SEC_OUT" | sed 's/^/  /'   # UX-3: 完整透出(警告可读才可行动)

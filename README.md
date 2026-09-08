@@ -84,7 +84,7 @@ cd opencode-setup
 
     步骤 11 与 12 之间另有三个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）、MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）与记忆/自进化双通道（`INSTALL_CMODULES=1`，装完交互问是否开启夜间自进化定时任务）。三者默认跳过，见下文对应小节。
 
-12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
+12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 出环硬门控（`/completion-gate` 斜杠命令：宣称完成前独立复核，check 阻断/report 报告）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
 
 ### 交互式选装菜单
 
@@ -171,10 +171,28 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 |---|---|---|
 | `gen-permissions.sh` | 权限红线（三档模板：交互版 59 条 bash 规则：14 deny / 6 ask / 39 常用 allow；无头版 7 条红线；沙箱版网络红线，见下小节） | 重新生成：`bash gen-permissions.sh`（终端上问标准/沙箱档；无头：`--headless`；沙箱：`--sandbox`） |
 | `audit-init.sh` | 审计模块（JSONL + 密钥脱敏 + 熔断器 + 30 天轮转） | 初始化：`bash audit-init.sh`；轮转：`bash audit-init.sh --rotate` |
+| `completion-gate.sh` | 出环硬门控（evidence-gated completion，`/completion-gate` 斜杠命令） | 阻断：`bash completion-gate.sh check [workdir]`；报告：`report` 子命令 |
 | `security-check.sh` | 安全自检（密钥治理/offline/provenance/注入扫描）+ AGENT-CARD 生成 | 装完跑一次：`bash security-check.sh`；开 offline：`bash security-check.sh --offline` |
 | `gen-compliance.sh` | 合规文档（CN/EU 双地区，provider 数据流向清单） | `bash gen-compliance.sh --region cn` |
 | `bwrap-setup.sh` | B 档沙箱一键脚本（clavinculis 优先，降级 opencode-bwrap） | `bash bwrap-setup.sh` |
 | `devcontainer/` | C 档容器隔离模板（非 root + cap-drop） | 见 `devcontainer/README.md` |
+
+### 出环硬门控（completion-gate，完成时双控）
+
+完成时幻觉调研（arXiv 2606.09863）实测：agent 宣称"完成"时，单靠推理环内自评假成功率 44-52%；加一道**独立于推理环的机器复核**（双控）可压到 3%。`completion-gate.sh` 是 AGENTS.md 在场守则的机器执行层——宣称完成前，由环外脚本按退出码阻断/放行：
+
+| 检查项 | 判定 |
+|---|---|
+| git 卫生 | 有未提交变更且会话有 edit/write 工具记录（查 opencode 会话 DB）→ 未过（需 commit 或说明） |
+| 测试通过 | 检出 `package.json` test / Makefile test / pytest 痕迹即跑（`timeout -s KILL 300`），退出非零 → 未过 |
+| 声明-在场一致 | 扫会话最后一条 assistant 消息的完成声明（`已安装/已配置/…`+名词、`✓` 行、`已生成`+文件名），逐项 `command -v` / 文件存在复核；声明了不在场的东西 → 未过 |
+| 明文密钥 | 扫暂存/未提交文件有无 `sk-` 开头 20+ 位密钥，命中 → 未过（输出掩码） |
+
+- **阻断模式**：`bash completion-gate.sh check [workdir]`——任一未过退出码 1；`/completion-gate` 斜杠命令（部署于 `~/.config/opencode/commands/`）即调它，退出码 1 前不得宣称完成
+- **报告模式**：`bash completion-gate.sh report [workdir]`——同样输出，恒退出 0，不阻断人工收尾
+- **诚实覆盖**：声明复核的名词映射硬编码一小批（opencode/mineru/skillopt/mem0/rtk/codegraph/bun/node + `*.sh`/`*.json` 等文件名模式），映射外不覆盖，输出如实说明
+- **挂载形态**：opencode 1.18.29 的 config schema 无 `event` 键，TUI 与 `opencode run` 双实测 event 命令均不触发（无 Stop/session.idle 等价事件），故挂斜杠命令形态；单测见 `tests/test-completion-gate.sh`（四夹具场景断言退出码与输出）
+
 
 ### 权限模板三档（交互 / 无头 / 沙箱）
 
