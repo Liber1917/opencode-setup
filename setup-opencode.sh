@@ -520,6 +520,16 @@ if command -v python3 &> /dev/null; then
     if python3 -m ensurepip --upgrade >/dev/null 2>&1 && python3 -m pip --version &> /dev/null; then
       PIP_READY=1
       echo -e "${GREEN}✓ pip 引导完成 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
+    elif command -v apt-get >/dev/null 2>&1; then
+      # 精简镜像常裁剪 python3-venv 致 ensurepip 不可用(oct/jammy 实测), 回退 apt 装 python3-pip
+      echo -e "${BLUE}  - ensurepip 失败, 回退 apt 安装 python3-pip...${NC}"
+      apt_ensure_update
+      if timeout -s KILL 300 $SUDO apt-get install -y python3-pip >/dev/null 2>&1 && python3 -m pip --version &> /dev/null; then
+        PIP_READY=1
+        echo -e "${GREEN}✓ pip 经 apt 回退安装完成 ($(python3 -m pip --version 2>/dev/null | cut -d' ' -f2))${NC}"
+      else
+        echo -e "${YELLOW}⚠ ensurepip 与 apt 回退均失败（可手动执行: sudo apt install python3-pip）${NC}"
+      fi
     else
       echo -e "${YELLOW}⚠ ensurepip 失败（可手动执行: sudo apt install python3-pip）${NC}"
     fi
@@ -1167,7 +1177,10 @@ else
     read -r cmodules_cron || cmodules_cron=""
     echo ""
     if [[ "$cmodules_cron" =~ ^[Yy]$ ]]; then
-      if ! command -v crontab >/dev/null 2>&1; then
+      if ! command -v skillopt-sleep >/dev/null 2>&1; then
+        echo -e "${YELLOW}  ⚠ skillopt-sleep 未安装(pip 缺失?),定时任务不写入;装好后重跑本脚本或手动 crontab -e 加:${NC}"
+        echo "    $CMODULES_CRON_LINE"
+      elif ! command -v crontab >/dev/null 2>&1; then
         echo -e "${YELLOW}  ⚠ crontab 不可用,手动开启: crontab -e 加行:${NC}"
         echo "    $CMODULES_CRON_LINE"
       elif crontab -l 2>/dev/null | grep -F 'skillopt-sleep' >/dev/null 2>&1; then
@@ -1387,19 +1400,23 @@ if [ "${INSTALL_GSD:-0}" = "1" ]; then
 else
   echo "  GSD 工作流:   未安装(INSTALL_GSD=1 可选装)"
 fi
-if [ "${INSTALL_MINERU:-0}" = "1" ]; then
-  echo "  MinerU 解析:  mineru 命令(已选装, 首次运行自动从 modelscope 下载模型)"
+if command -v mineru >/dev/null 2>&1; then
+  echo "  MinerU 解析:  mineru 命令已就绪(首次运行自动从 modelscope 下载模型)"
+elif [ "${INSTALL_MINERU:-0}" = "1" ]; then
+  echo "  MinerU 解析:  未装成(安装失败或 pip 缺失),手动: python3 -m pip install \"mineru[core]\"(PEP 668 系统加 --break-system-packages)"
 else
   echo "  MinerU 解析:  未安装(大量解析 INSTALL_MINERU=1 本地档; 轻量用 Flash MCP, 见 README)"
 fi
-# 选装汇总行: 菜单与环境变量两条路径设同一组变量,统一在此回显
+# 选装汇总行: 按实际在场判定(装机选中≠装成——pip 失败链会静默跳过 MinerU/SkillOpt)
 EXTRAS_SUM=""
 [ "${INSTALL_GSD:-0}" = "1" ] && EXTRAS_SUM="GSD"
-[ "${INSTALL_MINERU:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
-[ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
-[ "${INSTALL_CMODULES:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }记忆/自进化"
+command -v mineru >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
+if command -v mem0 >/dev/null 2>&1 || command -v skillopt-sleep >/dev/null 2>&1; then
+  EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }记忆/自进化"
+fi
+[ -f "$CONFIG_DIR/plugins/sp-router.ts" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
 # DCP 存在"选中但 AGPL 门拒绝"中间态,以实际注册结果为准(与其安装段同一判据)
-if [ "${INSTALL_DCP:-0}" = "1" ] && grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
+if grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
   EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }DCP"
 fi
 if [ -n "$EXTRAS_SUM" ]; then
