@@ -16,7 +16,7 @@ APT_UPDATED=0   # 确保 apt install 前 lists 就绪(全新容器/镜像跳过�
 apt_ensure_update() {
   [ "$APT_UPDATED" = 1 ] && return 0
   command -v apt-get >/dev/null 2>&1 || return 0
-  $SUDO apt-get update -qq >/dev/null 2>&1 || true
+  timeout -s KILL 180 $SUDO apt-get update -qq >/dev/null 2>&1 || true
   APT_UPDATED=1
 }
 
@@ -407,7 +407,7 @@ if ! command -v unzip &> /dev/null; then
   echo -e "${YELLOW}⚠ 缺少 unzip，正在安装...${NC}"
   if command -v apt-get &> /dev/null; then
     apt_ensure_update
-    $SUDO apt-get install -y unzip
+    timeout -s KILL 300 $SUDO apt-get install -y unzip
   elif command -v yum &> /dev/null; then
     $SUDO yum install -y unzip
   elif command -v brew &> /dev/null; then
@@ -471,7 +471,7 @@ if ! command -v node &> /dev/null; then
     if command -v apt-get &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
       apt_ensure_update
-      $SUDO apt-get install -y nodejs
+      timeout -s KILL 300 $SUDO apt-get install -y nodejs
     elif command -v yum &> /dev/null; then
       curl -fsSL https://rpm.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
       $SUDO yum install -y nodejs
