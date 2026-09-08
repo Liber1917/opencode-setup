@@ -65,7 +65,7 @@ cd opencode-setup
 
 ## 使用方式
 
-安装脚本按 12 步执行（`sh` 运行会在开始前自动切换 bash）：
+安装脚本按 12 步执行（`sh` 运行会在开始前自动切换 bash；交互终端上步骤 1 之后会弹出选装菜单，见下文「交互式选装菜单」）：
 
 1. 检测已有配置（发现现存配置时可选备份后重生成，非交互默认保留现有配置）
 2. 创建配置目录
@@ -82,6 +82,35 @@ cd opencode-setup
     步骤 11 与 12 之间另有两个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）与 MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）。两者默认跳过，见下文对应小节。
 
 12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
+
+### 交互式选装菜单
+
+在交互终端直接运行（且未设置任何选装环境变量）时，步骤 1 之后会弹出安装向导式选装菜单，把 GSD/DCP/MinerU/superpowers 路由四个选装项一次选完：
+
+```text
+═══════════════════════════════════
+ 可选组件(全免费,默认都不装)
+═══════════════════════════════════
+ 1. GSD 工作流        [ ] 多阶段项目管理(/gsd-* 命令,用户显式驱动)
+ 2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)
+ 3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)
+ 4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)
+───────────────────────────────────
+ 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装):
+```
+
+- 输入编号**空格分隔**（`1 3` = GSD + MinerU），回车确认；**直接回车 = 全不装**（与历史默认一致）
+- 非法输入提示重输，最多 3 次，超限自动按全不装继续（不会卡死安装）
+- 选中 `2`（DCP）只代表进入安装段，**AGPL-3.0 确认门仍在安装时进行**——菜单不绕过 `CONFIRM_AGPL`
+- 选中后回显（如 `→ 将安装: GSD, MinerU`），收尾汇总输出「已装组件(选装)」行；菜单与环境变量设的是同一组开关，无第二套状态
+
+**菜单跳过条件**（优先级从高到低，任一命中即不出现菜单，直接走环境变量语义）：
+
+1. `SETUP_INTERACTIVE=0` —— 强制关闭菜单（最高优先级，交互终端也不弹）
+2. 已显式设置任一 `INSTALL_GSD` / `INSTALL_DCP` / `INSTALL_MINERU` / `SUPERPOWERS_ROUTER` / `CONFIRM_AGPL` —— 用户已给定路径，不打扰
+3. 非交互终端（`curl | bash` 管道、CI、`docker exec -i` 等 `[ -t 0 ]` 为假的环境）—— 自动跳过，**非交互行为与历史版本完全一致**
+
+调试/回归：`SETUP_FORCE_MENU=1` 可在无 TTY 时强制弹出菜单（输入改从 stdin 管道读取），用于测试菜单代码路径。
 
 ### 自定义路径
 
@@ -113,6 +142,7 @@ export INSTALL_GSD=1          # 选装 GSD 工作流（默认跳过，见下文�
 export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
 export INSTALL_MINERU=1       # 选装 MinerU 文档解析·本地档（免费无限量，Apache-2.0，见「MinerU 文档解析」小节；轻量可用 Flash MCP 免装）
 export SUPERPOWERS_ROUTER=1   # 启用 superpowers 路由模式（渐进披露替代官方急加载，见「superpowers 路由模式」小节）
+export SETUP_INTERACTIVE=0    # 强制关闭交互式选装菜单（设置任一上面的选装变量时菜单本就不出现，见「交互式选装菜单」小节）
 export SKIP_SECURITY=1        # 跳过步骤 12 安全与能力增强
 export SKIP_APT_MIRROR=1      # 完全跳过 apt 源优化
 export FORCE_APT_MIRROR=1     # 强制重新测速并切换（即使已自定义）

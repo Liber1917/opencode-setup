@@ -117,6 +117,83 @@ fi
 # 步骤 2: 创建目录结构
 # ------------------------------------------------------------------
 step_end 1 "检测已有配置"
+
+# ------------------------------------------------------------------
+# 交互式选装菜单: 步骤 1 后、任何安装动作前;选中即设 INSTALL_*/SUPERPOWERS_ROUTER,
+# 与环境变量路径共用同一组开关(菜单只是交互前端,不引入第二套状态)。
+# 门(任一命中即跳过,直接走环境变量语义):
+#   ① SETUP_INTERACTIVE=0 强制关菜单(最高优先级)
+#   ② 任一选装变量(INSTALL_GSD/INSTALL_DCP/INSTALL_MINERU/SUPERPOWERS_ROUTER/
+#      CONFIRM_AGPL)已在环境中显式设置——用户已给路径,不打扰
+#   ③ 非交互终端([ -t 0 ] 为假: curl|bash 管道/CI)——行为与历史版本完全一致;
+#      SETUP_FORCE_MENU=1 为无 TTY 调试入口(供回归测试从 stdin 喂输入)
+# ------------------------------------------------------------------
+interactive_component_menu() {
+  [ "${SETUP_INTERACTIVE:-1}" = "0" ] && return 0
+  [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${CONFIRM_AGPL:-}" ] && return 0
+  if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
+    return 0
+  fi
+
+  echo ""
+  echo -e "${YELLOW}═══════════════════════════════════${NC}"
+  echo -e "${YELLOW} 可选组件(全免费,默认都不装)${NC}"
+  echo -e "${YELLOW}═══════════════════════════════════${NC}"
+  echo " 1. GSD 工作流        [ ] 多阶段项目管理(/gsd-* 命令,用户显式驱动)"
+  echo " 2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)"
+  echo " 3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)"
+  echo " 4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)"
+  echo -e "${YELLOW}───────────────────────────────────${NC}"
+  echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
+
+  local attempt answer sel ok picks=""
+  for attempt in 1 2 3; do
+    answer=""
+    read -r answer || answer=""   # stdin 耗尽(EOF)按全不装,不挂死
+    if [ -z "${answer//[[:space:]]/}" ]; then
+      picks=""
+      break
+    fi
+    ok=1
+    picks=""
+    for sel in $answer; do
+      case "$sel" in
+        1|2|3|4) picks="$picks$sel " ;;
+        *) ok=0 ;;
+      esac
+    done
+    [ "$ok" = "1" ] && break
+    picks=""                      # 非法轮次丢弃残留选择("1 x" 不留 1)
+    if [ "$attempt" -lt 3 ]; then
+      echo -e "${YELLOW}  ⚠ 无效输入 \"${answer}\"(合法: 1-4,空格分隔),请重输(${attempt}/3)${NC}"
+      echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
+    else
+      echo -e "${YELLOW}  ⚠ 连续 3 次无效输入,按全不装继续${NC}"
+    fi
+  done
+
+  # 校验通过才落变量,保证非法轮次零残留
+  local names=""
+  for sel in $picks; do
+    case "$sel" in
+      1) INSTALL_GSD=1;        names="${names:+$names, }GSD" ;;
+      2) INSTALL_DCP=1;        names="${names:+$names, }DCP" ;;
+      3) INSTALL_MINERU=1;     names="${names:+$names, }MinerU" ;;
+      4) SUPERPOWERS_ROUTER=1; names="${names:+$names, }superpowers路由" ;;
+    esac
+  done
+  echo ""
+  if [ -n "$names" ]; then
+    echo -e "${GREEN}→ 将安装: ${names}${NC}"
+    [ "${INSTALL_DCP:-0}" = "1" ] && echo -e "${BLUE}  - DCP 的 AGPL 确认将在安装时进行(本菜单不绕过 CONFIRM_AGPL 确认门)${NC}"
+  else
+    echo -e "${BLUE}  - 未选择任何选装组件(全不装,与默认行为一致)${NC}"
+  fi
+  echo ""
+  return 0
+}
+interactive_component_menu
+
 step_begin
 echo -e "${YELLOW}[2/12] 创建配置目录...${NC}"
 mkdir -p "$CONFIG_DIR"
@@ -1078,7 +1155,7 @@ elif [ -d "$SCRIPT_DIR/e-modules" ]; then
   #    模板三档: 默认交互版 / --headless 无头版(benchmark/CI) / --sandbox 沙箱版
   #    (容器/隔离环境: 删本机破坏类 deny、保留网络不可逆 deny、ask 归零免手动点)。
   #    CI 直选: PERMISSION_MODE=sandbox bash setup-opencode.sh(经 gen-permissions.sh 生效)。
-  #    交互选装菜单合并后, 在此接线为菜单项「权限沙箱档」。
+  #    档位选择内置在 gen-permissions 交互流程(装机问标准/沙箱),不进选装菜单。
   if command -v python3 >/dev/null 2>&1; then
     MERGE_OUT=$("$MOD_DIR/gen-permissions.sh" "$PERM_TMP" >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" "$PERM_TMP" << 'PYEOF'
 import json,sys
@@ -1254,6 +1331,20 @@ if [ "${INSTALL_MINERU:-0}" = "1" ]; then
   echo "  MinerU 解析:  mineru 命令(已选装, 首次运行自动从 modelscope 下载模型)"
 else
   echo "  MinerU 解析:  未安装(大量解析 INSTALL_MINERU=1 本地档; 轻量用 Flash MCP, 见 README)"
+fi
+# 选装汇总行: 菜单与环境变量两条路径设同一组变量,统一在此回显
+EXTRAS_SUM=""
+[ "${INSTALL_GSD:-0}" = "1" ] && EXTRAS_SUM="GSD"
+[ "${INSTALL_MINERU:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
+[ "${SUPERPOWERS_ROUTER:-0}" = "1" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
+# DCP 存在"选中但 AGPL 门拒绝"中间态,以实际注册结果为准(与其安装段同一判据)
+if [ "${INSTALL_DCP:-0}" = "1" ] && grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
+  EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }DCP"
+fi
+if [ -n "$EXTRAS_SUM" ]; then
+  echo "  已装组件(选装): ${EXTRAS_SUM}"
+else
+  echo "  已装组件(选装): 无(交互菜单或 INSTALL_*/SUPERPOWERS_ROUTER=1 可启用)"
 fi
 echo "  CodeGraph:    项目目录运行 codegraph init 生成索引"
 echo ""
