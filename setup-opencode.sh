@@ -745,7 +745,8 @@ if [ -z "$CG_BIN" ]; then
   if command -v npm &> /dev/null; then
     echo -e "${YELLOW}正在安装 codegraph（npmmirror 源，约 30-60s，超时 120s）...${NC}"
     CG_INSTALL_LOG="$(mktemp)"
-    if timeout 120 npm i -g --registry="$NPM_REGISTRY" @colbymchenry/codegraph > "$CG_INSTALL_LOG" 2>&1; then
+    # timeout 一律 -s KILL: SIGTERM 对挂起态(T)进程不投递(实测 DCP 安装陷 T 态整链僵死 16 分钟), SIGKILL 必达
+    if timeout -s KILL 120 npm i -g --registry="$NPM_REGISTRY" @colbymchenry/codegraph > "$CG_INSTALL_LOG" 2>&1; then
       NPM_PREFIX="$(npm config get prefix)"
       CG_BIN="$NPM_PREFIX/bin/codegraph"
       if [ -x "$CG_BIN" ]; then
@@ -911,7 +912,7 @@ else
   else
     # 官方装法(dcp-verify.md 实测一次成功; 大包下载约 3 分钟, 首跑可能超 2 分钟, 上限 10 分钟)
     echo "  正在安装 DCP(大包下载, 超时上限 600s)..."
-    if timeout 600 opencode plugin @tarquinen/opencode-dcp@latest --global; then
+    if timeout -s KILL 600 opencode plugin @tarquinen/opencode-dcp@latest --global; then
       # 默认 dcp.jsonc(若不存在): 阈值取实测可用配置, 附按模型上下文调整的说明
       if [ ! -f "$CONFIG_DIR/dcp.jsonc" ]; then
         cat > "$CONFIG_DIR/dcp.jsonc" << 'DCP_EOF'
@@ -979,11 +980,11 @@ else
   else
     echo "  正在安装 MinerU(大包含 PyTorch, 走中科大源, 超时上限 900s)..."
     MINERU_PIP_LOG="$(mktemp)"
-    timeout 900 python3 -m pip install "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
+    timeout -s KILL 900 python3 -m pip install "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
     MINERU_PIP_RC="${PIPESTATUS[0]}"
     if [ "$MINERU_PIP_RC" != "0" ] && grep -qi 'externally-managed' "$MINERU_PIP_LOG"; then
       echo -e "${BLUE}  - 系统启用 PEP 668(externally-managed), 加 --break-system-packages 重试${NC}"
-      timeout 900 python3 -m pip install --break-system-packages "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
+      timeout -s KILL 900 python3 -m pip install --break-system-packages "mineru[core]" 2>&1 | tee "$MINERU_PIP_LOG"
       MINERU_PIP_RC="${PIPESTATUS[0]}"
     fi
     rm -f "$MINERU_PIP_LOG"
@@ -1155,7 +1156,7 @@ PYEOF
   if command -v opencode >/dev/null 2>&1; then
     ROUTE_MODEL=$(python3 -c "import json;c=json.load(open('$CONFIG_DIR/oh-my-openagent.json'));print(next(iter(c.get('agents',{}).values(),{}).get('model','zhipuai-coding-plan/glm-5.3')))" 2>/dev/null || echo zhipuai-coding-plan/glm-5.3)
     [ -z "$ROUTE_MODEL" ] && ROUTE_MODEL=zhipuai-coding-plan/glm-5.3
-    ROUTE_OUT=$(timeout 60 opencode run --model "$ROUTE_MODEL" '回答:OK' 2>/dev/null | grep -c OK || true)
+    ROUTE_OUT=$(timeout -s KILL 60 opencode run --model "$ROUTE_MODEL" '回答:OK' 2>/dev/null | grep -c OK || true)
     ROUTE_OK=$(( ${ROUTE_OUT:-0} ))
     if [ "$ROUTE_OK" -gt 0 ] 2>/dev/null; then
       echo -e "${GREEN}  ✓ subagent 路由自检通过${NC}"
