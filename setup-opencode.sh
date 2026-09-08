@@ -1075,6 +1075,10 @@ elif [ -d "$SCRIPT_DIR/e-modules" ]; then
 
   export PERM_TMP
   # ① 权限红线(merge 进 opencode.json 的 permission 段)
+  #    模板三档: 默认交互版 / --headless 无头版(benchmark/CI) / --sandbox 沙箱版
+  #    (容器/隔离环境: 删本机破坏类 deny、保留网络不可逆 deny、ask 归零免手动点)。
+  #    CI 直选: PERMISSION_MODE=sandbox bash setup-opencode.sh(经 gen-permissions.sh 生效)。
+  #    交互选装菜单合并后, 在此接线为菜单项「权限沙箱档」。
   if command -v python3 >/dev/null 2>&1; then
     MERGE_OUT=$("$MOD_DIR/gen-permissions.sh" "$PERM_TMP" >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" "$PERM_TMP" << 'PYEOF'
 import json,sys
