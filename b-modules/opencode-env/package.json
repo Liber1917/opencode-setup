@@ -1,0 +1,7 @@
+{
+  "name": "opencode-env",
+  "version": "0.1.0",
+  "type": "module",
+  "main": ".opencode/plugin.js",
+  "license": "MIT"
+}

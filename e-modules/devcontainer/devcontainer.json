@@ -1,0 +1,30 @@
+{
+  "name": "opencode-dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZshAsDefaultShell": true
+    }
+  },
+  "containerUser": "vscode",
+  "securityOpt": [
+    "no-new-privileges:true"
+  ],
+  "runArgs": [
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges"
+  ],
+  "mounts": [
+    "source=opencode-bashhistory,target=/home/vscode/.bash_history,type=volume",
+    "source=opencode-config,target=/home/vscode/.config/opencode,type=volume"
+  ],
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y ripgrep unzip && curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh | bash",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shellIntegration.enabled": true
+      }
+    }
+  }
+}

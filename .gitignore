@@ -1,0 +1,7 @@
+.omo/
+.playwright-mcp/
+.codegraph/
+*.png
+.planning/
+.env*
+.env.local
