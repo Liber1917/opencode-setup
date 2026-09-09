@@ -253,9 +253,15 @@ check_secrets() {
     files="$(cd "$WORKDIR" && find . -maxdepth 3 -type f -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | sed 's|^\./||')"
     scope="非 git 仓库浅层文件"
   fi
-  hit=""
+  hit=""; skip_tests=0
   while IFS= read -r f; do
     [ -n "$f" ] && [ -f "$WORKDIR/$f" ] || continue
+    # 测试夹具豁免: tests?/ 目录或 test-*/*_test* 文件名默认跳过(内含假密钥是常态),
+    # 豁免必须可见;GATE_STRICT_SECRETS=1 全量扫(真机教训: 自家测试的 sk-abcdefghij 被误拦)
+    if [ "${GATE_STRICT_SECRETS:-0}" != "1" ] \
+       && { printf '%s' "$f" | grep -qE '(^|/)(tests?|__tests__)/|(^|/)(test-[^/]*|[^/]*_test)\.[a-z]+$'; }; then
+      skip_tests=$((skip_tests+1)); continue
+    fi
     m="$(grep -hoE 'sk-[A-Za-z0-9]{20,}' "$WORKDIR/$f" 2>/dev/null | head -1)"
     [ -n "$m" ] && hit+="$f:${m:0:8}*** "
   done << EOF
@@ -265,7 +271,7 @@ EOF
     add "[✗] 明文密钥   $hit——收尾前移除或改用环境变量"
     NFAIL+=1
   else
-    add "[✓] 明文密钥   未检出 sk- 明文密钥(扫描范围: $scope)"
+    add "[✓] 明文密钥   未检出 sk- 明文密钥(扫描范围: $scope;跳过测试夹具 $skip_tests 个,GATE_STRICT_SECRETS=1 全量扫)"
   fi
 }
 
