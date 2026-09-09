@@ -479,7 +479,10 @@ if ! command -v node &> /dev/null; then
     if command -v apt-get &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
       apt_ensure_update
-      timeout -s KILL 300 $SUDO apt-get install -y nodejs
+      # F1 修复(收官回归 r2/r2c/r3 实测): 裸 timeout 在 set -e 下超时即静默 137 退出,
+      # 走不到下方失败引导。比照 pip 回退: 重试一次+||true+由在场判定成败
+      timeout -s KILL 300 $SUDO apt-get install -y nodejs || \
+        timeout -s KILL 300 $SUDO apt-get install -y nodejs || true
     elif command -v yum &> /dev/null; then
       curl -fsSL https://rpm.nodesource.com/setup_lts.x | ${SUDO:+$SUDO -E }bash - 2>/dev/null
       $SUDO yum install -y nodejs
@@ -1425,7 +1428,8 @@ EXTRAS_SUM=""
 [ "${INSTALL_GSD:-0}" = "1" ] && EXTRAS_SUM="GSD"
 command -v mineru >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
 if command -v mem0 >/dev/null 2>&1 || command -v skillopt-sleep >/dev/null 2>&1; then
-  EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }记忆/自进化"
+  command -v mem0 >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }mem0"
+  command -v skillopt-sleep >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }SkillOpt"
 fi
 [ -f "$CONFIG_DIR/plugins/sp-router.ts" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
 # DCP 存在"选中但 AGPL 门拒绝"中间态,以实际注册结果为准(与其安装段同一判据)
