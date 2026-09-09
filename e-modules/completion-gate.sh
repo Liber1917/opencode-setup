@@ -204,23 +204,43 @@ for m in re.finditer(FILE_RE + r'[^\n。;,，；]{0,24}' + FILE_VERB, msg):
     files.add(m.group(1))
 for f in files:
     claim_present(f, os.path.exists(os.path.join(workdir, f)) or os.path.exists(f))
-if missing:
-    print("MISSING\t" + "、".join(missing) + "\tOK\t" + "、".join(ok))
-elif ok:
-    print("ALL\t" + "、".join(ok))
-else:
-    print("NONE\t名词映射覆盖: " + "、".join(s.partition("=")[0] for s in noun_specs) + ";文件名模式 " + FILE_RE)
+known = {s.partition("=")[0] for s in noun_specs}
+known_l = {k.lower() for k in known}
+uncovered = []
+def _uncovered_from(segment):
+    for tok in re.findall(r'[A-Za-z][A-Za-z0-9_-]{2,}', segment):
+        if tok.lower() not in known_l and tok not in files and tok not in uncovered:
+            uncovered.append(tok)
+for m in re.finditer(VERB + r'[^\n。;,，；]{0,24}', msg):
+    _uncovered_from(m.group(0))
+for m in re.finditer(r'[A-Za-z][A-Za-z0-9_-]{2,}[^\n。;,，；]{0,24}' + VERB, msg):
+    _uncovered_from(m.group(0))
+if missing: print("MISSING:" + "、".join(missing))
+if ok: print("OK:" + "、".join(ok))
+if uncovered: print("UNCOVERED:" + "、".join(sorted(uncovered)))
+if not (missing or ok or uncovered):
+    print("NONE:名词映射覆盖: " + "、".join(s.partition("=")[0] for s in noun_specs) + ";文件名模式 " + FILE_RE)
 PYCLAIM
 )"
   if [ -z "$res" ]; then
     add "[-] 声明-在场  声明解析器不可用(需 python3),跳过"
     return
   fi
-  case "$res" in
-    MISSING*) add "[✗] 声明-在场  声明不在场: $(printf '%s' "$res" | cut -f2)——以 command -v / 文件存在为准,不得宣称完成"; NFAIL+=1 ;;
-    ALL*)     add "[✓] 声明-在场  $(printf '%s' "$res" | cut -f2) 声明均在场" ;;
-    NONE*)    add "[-] 声明-在场  未检出完成声明($(printf '%s' "$res" | cut -f2)),名词映射外的不覆盖" ;;
-  esac
+  local miss_nouns ok_nouns unc_nouns
+  miss_nouns="$(printf '%s\n' "$res" | grep '^MISSING:' | head -1 | cut -d: -f2-)"
+  ok_nouns="$(printf '%s\n' "$res" | grep '^OK:' | head -1 | cut -d: -f2-)"
+  unc_nouns="$(printf '%s\n' "$res" | grep '^UNCOVERED:' | head -1 | cut -d: -f2-)"
+  if [ -n "$miss_nouns" ]; then
+    add "[✗] 声明-在场  声明不在场: $miss_nouns——以 command -v / 文件存在为准,不得宣称完成"; NFAIL+=1
+  elif [ -n "$ok_nouns" ]; then
+    add "[✓] 声明-在场  $ok_nouns 声明均在场"
+  elif [ -n "$unc_nouns" ]; then
+    add "[-] 声明-在场  已知名词无命中,声明疑为映射外名词(见下)"
+  else
+    add "[-] 声明-在场  未检出完成声明($(printf '%s\n' "$res" | grep '^NONE:' | cut -d: -f2-))"
+  fi
+  # 诚实原则: 声明了映射外名词必须亮出"未验证",不许静默略过(AGENTS.md 在场守则)
+  [ -n "$unc_nouns" ] && add "[!] 声明-在场  未覆盖名词(未验证): $unc_nouns——不在名词映射内,人工复核或扩充映射"
 }
 
 # --- ④ 明文密钥: 扫暂存/未提交文件(非 git 仓库则扫浅层文件) ---------------
