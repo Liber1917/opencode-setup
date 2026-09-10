@@ -29,14 +29,15 @@ for _arg in "$@"; do
       exit 0
       ;;
     --upgrade)
-      # 动态升级模式占位(P1 替换: 状态清单还原上下文→环境变量→跳过安装专属段→12 步幂等重跑)
-      echo "--upgrade 将在 P1 实现,当前仅版本检测"
-      exit 0
+      # P1(动态升级,计划 .omo/plans/dynamic-upgrade.md): 只置旗不退出——
+      # 状态还原入口块依赖 CONFIG_DIR 与 detect_components(定义在其后),
+      # 故在 P0 基建段落落地(见 upgrade_restore_context),随后落入 12 步主流程
+      UPGRADE_MODE=1
       ;;
     -h|--help)
       echo "用法: ./setup-opencode.sh [选项]"
       echo "  (无参数)   默认: 全新安装或幂等重跑(选装: 交互菜单 / INSTALL_* 环境变量)"
-      echo "  --upgrade  动态升级已装机器到最新(还原选装上下文,不剥已装接线;P1 实现)"
+      echo "  --upgrade  动态升级已装机器到最新(读状态清单还原选装上下文,不剥已装接线)"
       echo "  --version  打印脚本版本"
       exit 0
       ;;
@@ -154,6 +155,45 @@ PYEOF
   fi
 }
 
+# P1 --upgrade 入口(计划 .omo/plans/dynamic-upgrade.md): 状态清单→UC_*→
+# INSTALL_*/CONFIRM_AGPL 环境变量还原,随后正常走 12 步(幂等段自会跳过已装)。
+# 依赖 CONFIG_DIR 与 detect_components,故在参数解析(--upgrade 置旗处)之后的
+# 主流程里调用;核心是修"裸重跑误剥"——不带开关重跑会走"未选"路径(如剥 mcp.gsd)。
+upgrade_restore_context() {
+  UPGRADE_MODE=1
+  STATE_FILE="$CONFIG_DIR/.setup-state.json"
+  if [ -f "$STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+    cp "$STATE_FILE" "$STATE_FILE.prev" 2>/dev/null || true
+    # eval stderr 抑制: 组件名带连字符的键(skillopt-sleep)不是合法 shell 赋值名,
+    # 会以 command not found 噪声出场;其余键照常赋值(还原只依赖合法键)
+    eval "$(python3 -c "
+import json
+c=json.load(open('$STATE_FILE')).get('components',{})
+f=json.load(open('$STATE_FILE')).get('flags',{})
+for k,v in c.items(): print(f'UC_{k}={str(v).lower()}')
+print('UC_MODEL='+repr(f.get('model','')))" 2>/dev/null)" 2>/dev/null || true
+    echo "✓ 状态清单已读: $(python3 -c "import json;print(json.load(open('$STATE_FILE')).get('script_version','?'))") → $SETUP_VERSION"
+  else
+    echo "无状态清单(v1.0 前安装?),考古模式现场重建"
+    # 考古: 调 P0 探测逻辑重新组装(规格原 sed 单行解析在实测中不可用——
+    # detect_components 输出为单行,逐段切分才是可靠重组方式)
+    _arch="$(detect_components)"
+    IFS=',' read -ra _arch_pairs <<< "$_arch"
+    for _p in "${_arch_pairs[@]}"; do
+      _k="${_p%%:*}"; _v="${_p##*:}"
+      _k="${_k//\"/}"; _k="${_k// /}"; _v="${_v// /}"
+      case "$_k" in [a-zA-Z_][a-zA-Z0-9_]*) eval "UC_${_k}=$_v" 2>/dev/null || true ;; esac
+    done
+  fi
+  # 状态→环境变量还原(核心: 修裸重跑误剥)
+  [ "${UC_dcp:-false}" = "true" ] && export INSTALL_DCP=1 CONFIRM_AGPL=1
+  [ "${UC_mineru:-false}" = "true" ] && export INSTALL_MINERU=1
+  [ "${UC_gsd:-false}" = "true" ] && export INSTALL_GSD=1
+  [ "${UC_superpowers_router:-false}" = "true" ] && export SUPERPOWERS_ROUTER=1
+  [ "${UC_mem0:-false}" = "true" ] || [ "${UC_skillopt:-false}" = "true" ] || [ "${UC_skillopt_sleep:-false}" = "true" ] && export INSTALL_CMODULES=1
+  export UPGRADE_MODE
+}
+
 # 计时: step_begin 记起点, step_end 输出耗时, EXIT 时打印汇总表便于排查瓶颈
 _step_t0=0
 STEP_TIMES=()
@@ -202,6 +242,11 @@ echo "  OpenCode: $CONFIG_DIR"
 echo "  Claude:   $CLAUDE_DIR"
 echo ""
 
+# P1 --upgrade: 参数解析处只置旗,这里(CONFIG_DIR 与探测函数就绪后)还原选装上下文
+if [ "${UPGRADE_MODE:-0}" = "1" ]; then
+  upgrade_restore_context
+fi
+
 # 确保 curl（下载依赖）；缺失时尝试 apt 安装，失败仅提示
 if ! command -v curl &> /dev/null; then
   echo -e "${YELLOW}⚠ curl 未安装，尝试安装...${NC}"
@@ -220,13 +265,15 @@ step_begin
 
 if [ -f "$CONFIG_DIR/opencode.json" ] || [ -f "$CONFIG_DIR/oh-my-openagent.json" ]; then
   echo -e "${YELLOW}⚠ 发现现有配置文件${NC}"
-  if [ -t 0 ]; then
+  # P1 升级模式: 不问覆盖,直接走保留分支(升级只加不破,已装配置以在场为准)
+  [ "${UPGRADE_MODE:-0}" = "1" ] && overwrite=n
+  if [ -t 0 ] && [ "${UPGRADE_MODE:-0}" != "1" ]; then
     echo -n "是否备份后重新生成? (y/n) [n]: "
     read -r overwrite
     overwrite=${overwrite:-n}
   else
     overwrite=n  # U-10: 管道安装(非交互)默认不覆盖,防 read 吞脚本后续行
-    echo -e "${YELLOW}  非交互模式: 保留现有配置${NC}"
+    echo -e "${YELLOW}  非交互/升级模式: 保留现有配置${NC}"
   fi
   if [[ $overwrite =~ ^[Yy]$ ]]; then
     backup_dir="$HOME/opencode-backup-$(date +%Y%m%d-%H%M%S)"
@@ -250,6 +297,7 @@ step_end 1 "检测已有配置"
 # 交互式选装菜单: 步骤 1 后、任何安装动作前;选中即设 INSTALL_*/SUPERPOWERS_ROUTER,
 # 与环境变量路径共用同一组开关(菜单只是交互前端,不引入第二套状态)。
 # 门(任一命中即跳过,直接走环境变量语义):
+#   ⓪ 升级模式(UPGRADE_MODE=1)——状态清单即答案,不重问(P1)
 #   ① SETUP_INTERACTIVE=0 强制关菜单(最高优先级)
 #   ② 任一选装变量(INSTALL_GSD/INSTALL_DCP/INSTALL_MINERU/SUPERPOWERS_ROUTER/
 #      INSTALL_CMODULES/CONFIRM_AGPL)已在环境中显式设置——用户已给路径,不打扰
@@ -257,6 +305,7 @@ step_end 1 "检测已有配置"
 #      SETUP_FORCE_MENU=1 为无 TTY 调试入口(供回归测试从 stdin 喂输入)
 # ------------------------------------------------------------------
 interactive_component_menu() {
+  [ "${UPGRADE_MODE:-0}" = "1" ] && return 0
   [ "${SETUP_INTERACTIVE:-1}" = "0" ] && return 0
   [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${INSTALL_CMODULES:-}${CONFIRM_AGPL:-}" ] && return 0
   if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
@@ -1148,6 +1197,7 @@ else
   if [ "${CONFIRM_AGPL:-0}" = "1" ]; then
     DCP_CONFIRMED=1
     echo -e "${BLUE}  - CONFIRM_AGPL=1 已显式确认(非交互双变量路径)${NC}"
+    [ "${UPGRADE_MODE:-0}" = "1" ] && echo "  (升级模式: 首次安装已确认 AGPL,状态清单留档)"
   elif [ -t 0 ]; then
     echo -n "    确认安装 DCP? (y/n) [n, 10 秒超时自动跳过]: "
     dcp_agree=""
@@ -1582,3 +1632,15 @@ fi
 # 状态清单收尾写入(动态升级 P0): 以上所有步骤的在场事实落账,
 # P1 --upgrade 以此还原选装上下文(不再依赖用户记得环境变量)
 write_state_file
+
+# P1 升级报告: diff 新旧状态清单(.prev 由 upgrade_restore_context 备份),
+# 本次新装/仍缺失一目了然;考古路径无 .prev,不打报告
+if [ "${UPGRADE_MODE:-0}" = "1" ] && [ -f "$CONFIG_DIR/.setup-state.json.prev" ]; then
+  python3 -c "
+import json
+old=json.load(open('$CONFIG_DIR/.setup-state.json.prev')).get('components',{})
+new=json.load(open('$CONFIG_DIR/.setup-state.json')).get('components',{})
+gained=[k for k,v in new.items() if v and not old.get(k)]
+lost=[k for k,v in old.items() if v and not new.get(k)]
+print('升级完成: 本次新装:', '、'.join(gained) or '无', '| 仍缺失:', '、'.join(lost) or '无')" 2>/dev/null
+fi

@@ -87,11 +87,6 @@ if [ -d "$ROOT/.git" ]; then
 fi
 assert_not_contains "$out" "一键配置脚本" "--version 不打安装横幅(未进主流程)"
 
-out="$(bash "$SCRIPT" --upgrade 2>&1)"; rc=$?
-assert_eq "$rc" "0" "--upgrade 占位退出码 0"
-assert_contains "$out" "--upgrade 将在 P1 实现" "--upgrade 打 P1 占位说明"
-assert_not_contains "$out" "一键配置脚本" "--upgrade 未实现前不进主流程"
-
 out="$(bash "$SCRIPT" -h 2>&1)"; rc=$?
 assert_eq "$rc" "0" "-h 退出码 0"
 assert_contains "$out" "默认" "-h 用法含默认装"
