@@ -5,6 +5,8 @@
 # 支持 Linux / macOS / WSL
 # ============================================================================
 
+SETUP_VERSION="v1.0"  # 动态升级 P0:版本常量,--upgrade 比对用(git 克隆场景以 git describe --tags --always 覆盖)
+
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "检测到非 bash 环境，自动以 bash 重新执行..."
   exec bash "$0" "$@"
@@ -12,6 +14,35 @@ fi
 
 set -e
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# 参数解析(动态升级 P0): --version/--upgrade/-h 即时退出,不进 12 步主流程;
+# 未识别参数忽略(与历史行为一致,主流程本就不吃参数)
+for _arg in "$@"; do
+  case "$_arg" in
+    --version)
+      if [ -d "$SCRIPT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+        _gc="$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+        echo "setup-opencode.sh $SETUP_VERSION${_gc:+ (git: $_gc)}"
+      else
+        echo "setup-opencode.sh $SETUP_VERSION"
+      fi
+      exit 0
+      ;;
+    --upgrade)
+      # 动态升级模式占位(P1 替换: 状态清单还原上下文→环境变量→跳过安装专属段→12 步幂等重跑)
+      echo "--upgrade 将在 P1 实现,当前仅版本检测"
+      exit 0
+      ;;
+    -h|--help)
+      echo "用法: ./setup-opencode.sh [选项]"
+      echo "  (无参数)   默认: 全新安装或幂等重跑(选装: 交互菜单 / INSTALL_* 环境变量)"
+      echo "  --upgrade  动态升级已装机器到最新(还原选装上下文,不剥已装接线;P1 实现)"
+      echo "  --version  打印脚本版本"
+      exit 0
+      ;;
+  esac
+done
+
 APT_UPDATED=0   # 确保 apt install 前 lists 就绪(全新容器/镜像跳过测速时仍可装包)
 apt_ensure_update() {
   [ "$APT_UPDATED" = 1 ] && return 0
@@ -25,6 +56,103 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+# ------------------------------------------------------------------
+# 状态清单(动态升级 P0 基建,计划: .omo/plans/dynamic-upgrade.md): 在场探测
+# 组件 + 原子写 $CONFIG_DIR/.setup-state.json,P1 --upgrade 读它还原安装上下文。
+# 在场守则(AGENTS.md): 每项写前实测(command -v/文件在场/配置实读),禁止静态
+# 猜测;P0 写入与 P1 读取共用同一套探测(单一事实源,清单漂移时不信旧清单)。
+# ------------------------------------------------------------------
+
+# 脚本版本: git 克隆场景以 git describe --tags --always 覆盖常量,curl 安装用户无 .git 用常量
+resolve_setup_version() {
+  local gd=""
+  if [ -d "$SCRIPT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+    gd="$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || true)"
+  fi
+  printf '%s' "${gd:-$SETUP_VERSION}"
+}
+
+# 组件在场探测 → 单行 json 片段("name": true/false, ...),供 write_state_file 组装
+detect_components() {
+  local out="" k present
+  for k in opencode bun node rtk codegraph webmap opstate mem0 skillopt-sleep mineru; do
+    if command -v "$k" >/dev/null 2>&1; then present=true; else present=false; fi
+    out="${out:+$out, }\"$k\": $present"
+  done
+  # dcp: 以 opencode.json 实注册为准(与安装段装后验证/收尾汇总同一判据)
+  if grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then present=true; else present=false; fi
+  out="$out, \"dcp\": $present"
+  # gsd: 官方安装器落 command/gsd-*(与步骤 9 同一判据;disabled_mcps 无关)
+  if ls "$CONFIG_DIR/command/gsd-"* >/dev/null 2>&1; then present=true; else present=false; fi
+  out="$out, \"gsd\": $present"
+  # superpowers_router: 路由插件三件套之锚(sp-router.ts)
+  if [ -f "$CONFIG_DIR/plugins/sp-router.ts" ]; then present=true; else present=false; fi
+  out="$out, \"superpowers_router\": $present"
+  # cmolecules_cron: 夜间自进化定时任务在 crontab 实测在册
+  if crontab -l 2>/dev/null | grep -Fq 'skillopt-sleep'; then present=true; else present=false; fi
+  out="$out, \"cmolecules_cron\": $present"
+  printf '%s' "$out"
+}
+
+# 组装状态清单并原子写(tmp+rename);python3 缺失降级: 跳过+黄警(下次运行重生成)
+write_state_file() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ 无 python3,跳过状态清单写入(状态文件是升级基建,缺了下次重生成)${NC}"
+    return 0
+  fi
+  if python3 - "$CONFIG_DIR" "$(resolve_setup_version)" "$(detect_components)" << 'PYEOF'
+import datetime, json, os, sys
+
+config_dir, ver, comps = sys.argv[1], sys.argv[2], sys.argv[3]
+state = {}
+state["script_version"] = ver
+state["installed_at"] = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+state["components"] = json.loads("{" + comps + "}")
+
+# flags 均从 opencode.json 实读;permission_mode 按权限红线模板特征推断
+# (gen-permissions.sh 三档: 标准 59 条/无头 8 条均含 rm -rf*+curl*|*sh deny;
+#   沙箱删本机破坏类 deny、留网络不可逆 deny)
+state["flags"] = {}
+try:
+    cfg = json.load(open(os.path.join(config_dir, "opencode.json")))
+    if not isinstance(cfg, dict):
+        cfg = None
+except Exception:
+    cfg = None
+if cfg is None:
+    state["flags"]["model"] = ""
+    state["flags"]["permission_mode"] = "unknown"
+else:
+    state["flags"]["model"] = cfg.get("model", "")
+    bash = cfg.get("permission", {}).get("bash", {})
+    if not isinstance(bash, dict) or not bash:
+        mode = "unknown"
+    elif bash.get("curl*|*sh") == "deny" and bash.get("rm -rf *") != "deny":
+        mode = "sandbox"
+    elif len(bash) == 59:
+        mode = "standard"
+    elif len(bash) == 8:
+        mode = "headless"
+    else:
+        mode = "custom"
+    state["flags"]["permission_mode"] = mode
+
+path = os.path.join(config_dir, ".setup-state.json")
+tmp = path + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(state, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, path)
+PYEOF
+  then
+    echo -e "${GREEN}✓ 状态清单 → $CONFIG_DIR/.setup-state.json(vP1 升级账本)${NC}"
+    return 0
+  else
+    echo -e "${YELLOW}⚠ 状态清单写入失败(JSON 损坏/目录不可写?),下次运行重生成${NC}"
+    return 0
+  fi
+}
 
 # 计时: step_begin 记起点, step_end 输出耗时, EXIT 时打印汇总表便于排查瓶颈
 _step_t0=0
@@ -1450,3 +1578,7 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
   echo "    source ~/.bashrc"
   echo "  或重启终端"
 fi
+
+# 状态清单收尾写入(动态升级 P0): 以上所有步骤的在场事实落账,
+# P1 --upgrade 以此还原选装上下文(不再依赖用户记得环境变量)
+write_state_file
