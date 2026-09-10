@@ -1,9 +1,11 @@
 #!/bin/bash
 # ============================================================================
-# 动态升级 P1 单测: --upgrade 入口段(upgrade_restore_context)
+# 动态升级 P1/P2 单测: --upgrade 入口段(upgrade_restore_context)+ 自更新段(P2)
 #   1. 状态清单在场 → UC_* 还原 + INSTALL_*/CONFIRM_AGPL 环境变量导出
 #      (核心: 修裸重跑误剥——dcp:true 必须带回 INSTALL_DCP=1 CONFIRM_AGPL=1)
 #   2. 无状态清单(v1.0 前安装) → 考古模式,现场探测重建 UC_*
+#   3. P2 自更新段: git 路径(origin 不可达不崩不重启 / 本地 origin 正向 ff-pull+重启)
+#      + curl 路径(同版本 diff 相同防循环不重启 / 新版校验后替换重启 / 坏文件双校验拒绝)
 #
 # 测试口径(诚实记录): 全脚本 --upgrade 会落入 12 步安装主流程(装包/写配置,
 #   真机副作用过重),故按允许的"入口段单元测试抽函数法"——sed 抽出
@@ -183,6 +185,100 @@ grep -qF '升级模式: 首次安装已确认 AGPL,状态清单留档' "$SCRIPT"
   && ok "DCP 确认门有升级模式知会行" || bad "DCP 确认门缺升级知会"
 grep -qF '升级完成: 本次新装' "$SCRIPT" \
   && ok "收尾升级报告(diff 新旧清单)在场" || bad "收尾缺升级报告"
+
+echo "== F. P2 自更新段抽取(入口块锚定: 注释头 → upgrade_restore_context 调用前) =="
+# 与 A-D 同法的"入口段单元测试": 主流程副作用重,抽出内联段受控执行;
+# exec 打桩为函数遮蔽内建 → 重启只回显不换进程,可断言 不崩/不重启/真重启 三态
+sed -n '/^  # P2 自更新/,/^  upgrade_restore_context$/p' "$SCRIPT" | sed '$d' > "$TMPD/selfup.sh"
+grep -q 'SCRIPT_GIT_DIR=' "$TMPD/selfup.sh" && ok "自更新段已抽出(git 路径变量在场)" || bad "自更新段未抽出(锚点失效或尚未实现)"
+grep -qF 'gh-proxy.com' "$TMPD/selfup.sh" && ok "自更新段含 curl 回退源(gh-proxy)" || bad "自更新段缺 curl 回退源"
+
+# exec 打桩驱动器: 函数遮蔽内建 exec,source 自更新段后自然结束
+cat > "$TMPD/selfup-driver.sh" << 'EOF'
+exec() { echo "RESTARTED: $*"; }
+source "$1"
+EOF
+
+# curl 桩: 回放下载(FAKE_CURL_SRC → 最后一个参数即 -o 目标);探针文件证明 curl 真被调用
+CURLBIN="$TMPD/curlbin"; mkdir -p "$CURLBIN"
+cat > "$CURLBIN/curl" << 'EOF'
+#!/bin/bash
+echo called >> "$CURL_PROBE"
+[ -n "${FAKE_CURL_FAIL:-}" ] && exit 22
+cp "$FAKE_CURL_SRC" "${@: -1}"
+EOF
+chmod +x "$CURLBIN/curl"
+
+GITC="-c user.email=t@t -c user.name=t"
+
+echo "== G. 自更新 git 路径: 假 origin 不可达 → NEW_C 取不到=0 → 不 exec 不崩 =="
+FIXG="$TMPD/fixg"; mkdir -p "$FIXG"
+git -C "$FIXG" init -q && git -C "$FIXG" symbolic-ref HEAD refs/heads/main
+git -C "$FIXG" $GITC commit -q --allow-empty -m init
+git -C "$FIXG" remote add origin "$TMPD/definitely-missing-origin.git"
+out="$(env HOME="$TMPD" SCRIPT_DIR="$FIXG" PATH="$CURLBIN:$PATH" \
+  CURL_PROBE="$TMPD/curl-probe" FAKE_CURL_FAIL=1 \
+  bash "$TMPD/selfup-driver.sh" "$TMPD/selfup.sh" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "origin 不可达自更新段退出码 0(不崩)"
+assert_not_contains "$out" "RESTARTED" "不可达 origin 不触发 exec 重启"
+assert_not_contains "$out" "脚本自更新" "不可达 origin 不打自更新成功文案"
+
+echo "== H. 自更新 git 路径正向: 本地 origin 领先 1 提交 → ff-pull + 重启新版 =="
+UP="$TMPD/upstream"; mkdir -p "$UP"
+git -C "$UP" init -q && git -C "$UP" symbolic-ref HEAD refs/heads/main
+echo v1 > "$UP/f" && git -C "$UP" add f && git -C "$UP" $GITC commit -q -m v1
+FIXH="$TMPD/fixh" && git clone -q "$UP" "$FIXH"
+echo v2 > "$UP/f" && git -C "$UP" $GITC commit -q -am v2
+# PATH 放必失败 curl 桩: git 分支本不触 curl,若意外落入 curl 分支也离线安全
+out="$(env HOME="$TMPD" SCRIPT_DIR="$FIXH" PATH="$CURLBIN:$PATH" \
+  CURL_PROBE="$TMPD/curl-probe" FAKE_CURL_FAIL=1 \
+  bash "$TMPD/selfup-driver.sh" "$TMPD/selfup.sh" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "正向自更新退出码 0"
+assert_contains "$out" "拉取 1 个新提交" "领先 1 提交打拉取对账行"
+assert_contains "$out" "RESTARTED" "ff-pull 成功后 exec 重启新版"
+assert_eq "$(git -C "$FIXH" rev-parse HEAD)" "$(git -C "$UP" rev-parse HEAD)" \
+  "ff-pull 真的发生(fixh HEAD 追平 upstream HEAD)"
+
+echo "== I. 自更新 curl 路径防循环: 下载与自身同版本 → 不替换不重启 =="
+FIXI="$TMPD/fixi"; mkdir -p "$FIXI"; cp "$SCRIPT" "$FIXI/setup-opencode.sh"
+rm -f "$TMPD/curl-probe"
+# $0 经 bash -c 的 NAME 参数指向自身副本(与下载内容相同 → diff 相同 → 防循环分支)
+out="$(env HOME="$TMPD" SCRIPT_DIR="$FIXI" PATH="$CURLBIN:$PATH" \
+  CURL_PROBE="$TMPD/curl-probe" FAKE_CURL_SRC="$FIXI/setup-opencode.sh" \
+  bash -c 'exec() { echo "RESTARTED: $*"; }; source "$1"' \
+  "$FIXI/setup-opencode.sh" "$TMPD/selfup.sh" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "同版本下载退出码 0"
+[ -f "$TMPD/curl-probe" ] && ok "curl 分支真被走到(探针落盘)" || bad "curl 未被调用(路径未覆盖)"
+assert_not_contains "$out" "RESTARTED" "同版本不 exec 重启(防循环)"
+assert_not_contains "$out" "脚本自更新完成" "同版本不打自更新成功文案"
+diff -q "$SCRIPT" "$FIXI/setup-opencode.sh" >/dev/null 2>&1 \
+  && ok "同版本下自身未被替换" || bad "同版本下自身被错误替换"
+
+echo "== J. 自更新 curl 路径正向: 下载到新版 → 双校验通过替换自身 + 重启 =="
+FIXJ="$TMPD/fixj"; mkdir -p "$FIXJ"; cp "$SCRIPT" "$FIXJ/setup-opencode.sh"
+cp "$SCRIPT" "$TMPD/newver.sh" && echo "# upstream vNew" >> "$TMPD/newver.sh"
+rm -f "$TMPD/curl-probe"
+out="$(env HOME="$TMPD" SCRIPT_DIR="$FIXJ" PATH="$CURLBIN:$PATH" \
+  CURL_PROBE="$TMPD/curl-probe" FAKE_CURL_SRC="$TMPD/newver.sh" \
+  bash -c 'exec() { echo "RESTARTED: $*"; }; source "$1"' \
+  "$FIXJ/setup-opencode.sh" "$TMPD/selfup.sh" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "新版替换路径退出码 0"
+assert_contains "$out" "脚本自更新完成(curl)" "打 curl 自更新成功文案"
+assert_contains "$out" "RESTARTED" "替换后 exec 重启新版"
+grep -q '# upstream vNew' "$FIXJ/setup-opencode.sh" \
+  && ok "新版内容已替换到自身" || bad "自身未换成新版内容"
+
+echo "== K. 自更新 curl 路径守卫: 坏下载(远小于 50KB)→ 双校验拒绝,不替换不重启 =="
+FIXK="$TMPD/fixk"; mkdir -p "$FIXK"; cp "$SCRIPT" "$FIXK/setup-opencode.sh"
+printf 'echo garbage\n' > "$TMPD/bad.sh"
+out="$(env HOME="$TMPD" SCRIPT_DIR="$FIXK" PATH="$CURLBIN:$PATH" \
+  CURL_PROBE="$TMPD/curl-probe" FAKE_CURL_SRC="$TMPD/bad.sh" \
+  bash -c 'exec() { echo "RESTARTED: $*"; }; source "$1"' \
+  "$FIXK/setup-opencode.sh" "$TMPD/selfup.sh" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "坏下载退出码 0(拒绝但不清算)"
+assert_not_contains "$out" "RESTARTED" "坏文件不 exec 重启"
+diff -q "$SCRIPT" "$FIXK/setup-opencode.sh" >/dev/null 2>&1 \
+  && ok "坏文件不替换自身(大小双校验生效)" || bad "坏文件错误替换了自身"
 
 echo ""
 echo "结果: $PASS 通过, $FAIL 失败"

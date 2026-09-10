@@ -37,7 +37,7 @@ for _arg in "$@"; do
     -h|--help)
       echo "用法: ./setup-opencode.sh [选项]"
       echo "  (无参数)   默认: 全新安装或幂等重跑(选装: 交互菜单 / INSTALL_* 环境变量)"
-      echo "  --upgrade  动态升级已装机器到最新(读状态清单还原选装上下文,不剥已装接线)"
+      echo "  --upgrade  动态升级已装机器到最新(自动自更新脚本+读状态清单还原选装上下文,不剥已装接线)"
       echo "  --version  打印脚本版本"
       exit 0
       ;;
@@ -244,6 +244,35 @@ echo ""
 
 # P1 --upgrade: 参数解析处只置旗,这里(CONFIG_DIR 与探测函数就绪后)还原选装上下文
 if [ "${UPGRADE_MODE:-0}" = "1" ]; then
+  # P2 自更新: 先把脚本自身更到最新,再以新版跑升级
+  # 防循环: 新版重跑此段时无更新即 NEW_C=0 / curl 下载与自身 diff 相同 → 不 exec,天然终止
+  SCRIPT_GIT_DIR="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$SCRIPT_GIT_DIR" ]; then
+    git -C "$SCRIPT_DIR" fetch origin main >/dev/null 2>&1 || true
+    NEW_C="$(git -C "$SCRIPT_DIR" rev-list HEAD..origin/main --count 2>/dev/null || echo 0)"
+    if [ "$NEW_C" -gt 0 ]; then
+      if git -C "$SCRIPT_DIR" pull --ff-only origin main >/dev/null 2>&1; then
+        echo "✓ 脚本自更新: 拉取 $NEW_C 个新提交,重启新版执行升级"
+        exec bash "$SCRIPT_DIR/setup-opencode.sh" --upgrade
+      else
+        echo "⚠ 本地有改动无法 ff-pull,以当前版本继续升级(自更新跳过)"
+      fi
+    fi
+  else
+    # curl 安装用户: 下载 main 最新脚本,校验后替换自身重启
+    # 双校验防坏文件: bash -n 语法 + 大小>50KB;diff 相同=已是最新 → 不替换不重启
+    NEW_SH="$(mktemp)"
+    if curl -fsSL --max-time 30 "https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" -o "$NEW_SH" 2>/dev/null \
+       || curl -fsSL --max-time 30 "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" -o "$NEW_SH" 2>/dev/null; then
+      if bash -n "$NEW_SH" && [ "$(wc -c < "$NEW_SH")" -gt 50000 ] \
+         && ! diff -q "$NEW_SH" "$0" >/dev/null 2>&1; then
+        cp "$NEW_SH" "$0" && chmod +x "$0" && rm -f "$NEW_SH"
+        echo "✓ 脚本自更新完成(curl),重启新版执行升级"
+        exec bash "$0" --upgrade
+      fi
+      rm -f "$NEW_SH" 2>/dev/null || true
+    fi
+  fi
   upgrade_restore_context
 fi
 
