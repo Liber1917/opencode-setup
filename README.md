@@ -165,6 +165,15 @@ apt 源测速默认执行：官方源最快则保持不动；若源文件已自�
 
 ## 升级
 
+**管道安装用户**（curl|bash，无本地仓库）的升级方式——管道本身就是自更新（拉到的即 main 最新）：
+
+```bash
+curl -fsSL "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" | bash -s -- --upgrade
+```
+
+> `-s` 让 bash 从 stdin 读脚本；`--` 之后的内容归脚本（防止 bash 把 `--upgrade` 当自己的选项）。
+
+
 `./setup-opencode.sh --upgrade` 一条命令（克隆用户自动 git pull；curl 用户自动重下载替换）：
 
 - **自更新先行**：升级第一步先把脚本自身更到最新，再以新版执行升级。git 克隆用户自动 `git pull --ff-only`（本地有改动无法快进时黄警跳过，以当前版本继续）；curl 安装用户自动重下载 main 最新脚本，经 `bash -n` 语法 + 大小双校验后替换自身。已是最新则直接继续——同版本不会重启，天然无循环
