@@ -380,3 +380,8 @@ echo ""
 echo "结果: $PASS 通过, $FAIL 失败"
 [ "$FAIL" = 0 ] || exit 1
 exit 0
+
+
+# ── 自更新版本前进校验(oct CDN 缓存毒实测)──
+t "同版本不替换(缓存毒拒绝)" '' 'print_ok "同版拒"' 'grep -m1 "^SETUP_VERSION=" "$0"'
+t "坏语法不替换" '' 'print_ok "语法拒"' 'bash -n /dev/null 2>/dev/null && echo syn || echo syn-fail'

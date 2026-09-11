@@ -264,11 +264,17 @@ if [ "${UPGRADE_MODE:-0}" = "1" ]; then
     NEW_SH="$(mktemp)"
     if curl -fsSL --max-time 30 "https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" -o "$NEW_SH" 2>/dev/null \
        || curl -fsSL --max-time 30 "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh" -o "$NEW_SH" 2>/dev/null; then
+      # 版本前进校验(oct 实测教训: CDN 缓存"合法旧版",语法+大小校验放行了旧文件):
+      # 下载侧 SETUP_VERSION 必须 != 本地才替换;同版本=缓存毒或已是最新,拒替换
+      DL_VER="$(grep -m1 '^SETUP_VERSION=' "$NEW_SH" 2>/dev/null | cut -d'"' -f2)"
       if bash -n "$NEW_SH" && [ "$(wc -c < "$NEW_SH")" -gt 50000 ] \
-         && ! diff -q "$NEW_SH" "$0" >/dev/null 2>&1; then
+         && ! diff -q "$NEW_SH" "$0" >/dev/null 2>&1 \
+         && [ -n "$DL_VER" ] && [ "$DL_VER" != "$SETUP_VERSION" ]; then
         cp "$NEW_SH" "$0" && chmod +x "$0" && rm -f "$NEW_SH"
-        echo "✓ 脚本自更新完成(curl),重启新版执行升级"
+        echo "✓ 脚本自更新完成(curl): $SETUP_VERSION → $DL_VER,重启新版执行升级"
         exec bash "$0" --upgrade
+      elif [ "${DL_VER:-}" = "$SETUP_VERSION" ]; then
+        echo "  - 远端与本地同版($SETUP_VERSION,CDN 可能缓存),以当前版本继续升级"
       fi
       rm -f "$NEW_SH" 2>/dev/null || true
     fi
