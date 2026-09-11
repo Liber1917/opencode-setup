@@ -17,7 +17,9 @@
 #              (隔离挡得住本机破坏, 挡不住网络不可逆), ask 归零
 #              (docker/pip/npm 等免手动点弹窗)。
 #              适用边界: 不是全 bypass——网络红线仍在。
-# 环境变量: PERMISSION_MODE=headless|sandbox 与对应 flag 等价(CI 直选)。
+# 环境变量: PERMISSION_MODE=headless|sandbox 与对应 flag 等价(CI 直选);
+#           PERM_NO_ASK=1 跳过交互档位问句直落标准档(非交互路径复用,
+#           如升级模式;全新安装问句行为不变)。
 
 set -euo pipefail
 MODE="${PERMISSION_MODE:-interactive}"
@@ -39,6 +41,7 @@ for a in "$@"; do
               保留网络不可逆红线(隔离挡不住网络), ask 归零免手动点; 不是全 bypass
 
 环境变量: PERMISSION_MODE=headless|sandbox 与对应 flag 等价(CI 直选)
+          PERM_NO_ASK=1 跳过档位问句直落标准档(非交互路径复用)
 HELP
       exit 0 ;;
     *) OUT="$a" ;;
@@ -55,7 +58,8 @@ esac
 # /dev/tty(重定向下仍可见), 输入读 stdin(同一终端)。
 # 非交互(管道/curl|bash/docker -i 无 -t): [ -t 0 ] 为假, 不问不读,
 # 直接标准档, 与历史版本零差异。
-if [ "$MODE" = "interactive" ] && [ -t 0 ]; then
+# PERM_NO_ASK=1: 终端在场也不问, 直落标准档(非交互调用方复用的双保险)。
+if [ "$MODE" = "interactive" ] && [ -t 0 ] && [ "${PERM_NO_ASK:-0}" != "1" ]; then
   TTY_OUT=/dev/stderr
   if [ -w /dev/tty ]; then TTY_OUT=/dev/tty; fi
   tries=0

@@ -1442,7 +1442,12 @@ elif [ -d "$SCRIPT_DIR/e-modules" ]; then
   #    (容器/隔离环境: 删本机破坏类 deny、保留网络不可逆 deny、ask 归零免手动点)。
   #    CI 直选: PERMISSION_MODE=sandbox bash setup-opencode.sh(经 gen-permissions.sh 生效)。
   #    档位选择内置在 gen-permissions 交互流程(装机问标准/沙箱),不进选装菜单。
-  if command -v python3 >/dev/null 2>&1; then
+  #    升级分叉(oct 实测 P1 疏漏): 命令替换只重定向 stdout/stderr 吞不掉 stdin
+  #    ——--upgrade 走到此档位问句仍弹,光标闪烁卡在等输入。升级语义=保留现有
+  #    权限配置(状态清单 flags.permission_mode 已留档),不重问不重生成。
+  if [ "${UPGRADE_MODE:-0}" = "1" ]; then
+    echo -e "${BLUE}  - 升级模式: 保留现有权限配置(重新生成用 bash $MOD_DIR/gen-permissions.sh)${NC}"
+  elif command -v python3 >/dev/null 2>&1; then
     MERGE_OUT=$("$MOD_DIR/gen-permissions.sh" "$PERM_TMP" >/dev/null 2>&1 && python3 - "$CONFIG_DIR/opencode.json" "$PERM_TMP" << 'PYEOF'
 import json,sys
 p, perm_file = sys.argv[1], sys.argv[2]

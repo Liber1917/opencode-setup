@@ -186,6 +186,102 @@ grep -qF '升级模式: 首次安装已确认 AGPL,状态清单留档' "$SCRIPT"
 grep -qF '升级完成: 本次新装' "$SCRIPT" \
   && ok "收尾升级报告(diff 新旧清单)在场" || bad "收尾缺升级报告"
 
+echo "== E2. 步骤12 权限段: UPGRADE_MODE=1 跳过 gen-permissions(抽段+打桩) =="
+# oct 实测疏漏回归: --upgrade 走到步骤 12, gen-permissions.sh 交互档位问句
+# 仍弹(命令替换只重定向 stdout/stderr 吞不掉 stdin, 光标闪烁卡在等输入)。
+# 升级语义=保留现有权限配置, 不重问不重生成; 全新安装路径行为不变(对照)。
+sed -n '/^  # ① 权限红线/,/^  # ② 审计/p' "$SCRIPT" | sed '$d' > "$TMPD/permblk.sh"
+grep -q 'gen-permissions.sh' "$TMPD/permblk.sh" \
+  && ok "权限段①已抽出(gen-permissions 调用在场)" || bad "权限段①未抽出(锚点失效)"
+
+# 打桩 gen-permissions: 探针落盘证明被调, 产物给最小合法 permission 段
+PERM_STUB="$TMPD/modstub"; mkdir -p "$PERM_STUB"
+cat > "$PERM_STUB/gen-permissions.sh" << 'EOF'
+#!/bin/bash
+echo called >> "$PERM_PROBE"
+printf '{"permission": {"webfetch": "ask"}}\n' > "$1"
+EOF
+chmod +x "$PERM_STUB/gen-permissions.sh"
+
+# run_perm <UPGRADE_MODE> <probe> <cfgdir>: 受控环境 source 抽出的权限段①
+run_perm() {
+  env HOME="$TMPD" PATH="$SYSBIN" MOD_DIR="$PERM_STUB" PERM_TMP="$TMPD/perm-tmp.json" \
+    CONFIG_DIR="$3" PERM_PROBE="$2" UPGRADE_MODE="$1" \
+    GREEN="" YELLOW="" BLUE="" NC="" bash -c 'source "$1"' _ "$TMPD/permblk.sh" 2>&1
+}
+
+CFG_U="$TMPD/cfgU"; mkdir -p "$CFG_U"
+printf '{"marker": "keep"}\n' > "$CFG_U/opencode.json"
+cp "$CFG_U/opencode.json" "$TMPD/perm-original.json"
+rm -f "$TMPD/probe-upg"
+out="$(run_perm 1 "$TMPD/probe-upg" "$CFG_U")"; rc=$?
+assert_eq "$rc" "0" "升级模式权限段退出码 0"
+assert_contains "$out" "升级模式: 保留现有权限配置" "升级模式打保留现有权限配置行"
+assert_contains "$out" "重新生成用 bash" "保留行带重新生成指引"
+[ ! -f "$TMPD/probe-upg" ] && ok "升级模式不调 gen-permissions(探针未落盘)" || bad "升级模式仍调了 gen-permissions(问句会卡等输入)"
+diff -q "$TMPD/perm-original.json" "$CFG_U/opencode.json" >/dev/null 2>&1 \
+  && ok "升级模式 opencode.json 字节未动(权限配置原样保留)" || bad "升级模式改写了 opencode.json"
+
+CFG_F="$TMPD/cfgF"; mkdir -p "$CFG_F"
+printf '{"marker": "keep"}\n' > "$CFG_F/opencode.json"
+rm -f "$TMPD/probe-fresh"
+out="$(run_perm 0 "$TMPD/probe-fresh" "$CFG_F")"; rc=$?
+assert_eq "$rc" "0" "非升级权限段退出码 0"
+[ -f "$TMPD/probe-fresh" ] && ok "非升级照常调 gen-permissions(全新安装行为不变)" || bad "非升级漏调 gen-permissions(回归)"
+assert_contains "$out" "权限红线已合并到 opencode.json" "非升级合并成功行在场"
+grep -q '"webfetch": "ask"' "$CFG_F/opencode.json" \
+  && ok "非升级权限段真合入 opencode.json(在场复核)" || bad "非升级权限段未落进配置"
+grep -q '"marker": "keep"' "$CFG_F/opencode.json" \
+  && ok "非升级合并不清空既有配置" || bad "非升级合并清掉了既有键"
+
+echo "== E3. gen-permissions 双保险: PERM_NO_ASK=1 真终端不问直落标准档 =="
+GEN="$ROOT/e-modules/gen-permissions.sh"
+bash "$GEN" "$TMPD/perm-ref.json" </dev/null 2>/dev/null
+# perm_pty <env前缀>: pty 真终端跑 gen-permissions(预喂回车), 回显退出码;
+#   终端输出落 $TMPD/perm-pty.out, 产物落 $TMPD/perm-out.json
+perm_pty() {
+  python3 - "$GEN" "$TMPD/perm-out.json" "$TMPD/perm-pty.out" "$1" << 'PY'
+import os, pty, select, sys, time
+gen, out, outf, envexpr = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("bash", ["bash", "-c", f'{envexpr} exec bash "{gen}" "{out}"'])
+os.write(fd, b"\n")  # 预喂回车(问句触发即取用;未触发则闲置, 无害)
+data = b""
+st = None
+deadline = time.time() + 15
+while time.time() < deadline:
+    r, _, _ = select.select([fd], [], [], 0.5)
+    if r:
+        try:
+            c = os.read(fd, 4096)
+        except OSError:
+            break
+        if not c:
+            break
+        data += c
+    else:
+        w, s = os.waitpid(pid, os.WNOHANG)
+        if w:
+            st = s
+            break
+if st is None:
+    _, st = os.waitpid(pid, 0)
+open(outf, "wb").write(data)
+print(os.waitstatus_to_exitcode(st))
+PY
+}
+RC="$(perm_pty 'PERM_NO_ASK=1')"
+assert_eq "$RC" "0" "PERM_NO_ASK=1 真终端 exit 0"
+assert_not_contains "$(cat "$TMPD/perm-pty.out" 2>/dev/null || true)" "权限档位" \
+  "PERM_NO_ASK=1 不弹档位问句"
+cmp -s "$TMPD/perm-ref.json" "$TMPD/perm-out.json"
+assert_eq "$?" "0" "PERM_NO_ASK=1 产物=标准档(与非交互参照字节一致)"
+RC="$(perm_pty '')"
+assert_eq "$RC" "0" "对照(无 PERM_NO_ASK) exit 0"
+assert_contains "$(cat "$TMPD/perm-pty.out" 2>/dev/null || true)" "权限档位" \
+  "对照(无 PERM_NO_ASK)问句照常弹(全新安装档位问句行为不变)"
+
 echo "== F. P2 自更新段抽取(入口块锚定: 注释头 → upgrade_restore_context 调用前) =="
 # 与 A-D 同法的"入口段单元测试": 主流程副作用重,抽出内联段受控执行;
 # exec 打桩为函数遮蔽内建 → 重启只回显不换进程,可断言 不崩/不重启/真重启 三态
