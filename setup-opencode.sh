@@ -357,13 +357,16 @@ interactive_component_menu() {
   if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
     # 管道升级: 无 TTY 不能交互,但必须通知用户新增了哪些可选组件(不静默)
     if [ "${UPGRADE_MODE:-0}" = "1" ]; then
-      _new_opts=""
-      [ "${UC_gsd:-false}" != "true" ] && _new_opts="${_new_opts} GSD"
-      [ "${UC_dcp:-false}" != "true" ] && _new_opts="${_new_opts} DCP"
-      [ "${UC_mineru:-false}" != "true" ] && _new_opts="${_new_opts} MinerU"
-      [ "${UC_superpowers_router:-false}" != "true" ] && _new_opts="${_new_opts} superpowers路由"
-      [ "${UC_mem0:-false}" != "true" ] && [ "${UC_skillopt_sleep:-false}" != "true" ] && _new_opts="${_new_opts} 记忆/自进化"
-      [ -n "$_new_opts" ] && echo -e "${BLUE}  ✦ 升级提示: 以下可选组件未装,需要时交互终端重跑或用环境变量:${_new_opts}${NC}" >&2
+      _new_env=""
+      [ "${UC_gsd:-false}" != "true" ] && _new_env="${_new_env} INSTALL_GSD=1"
+      [ "${UC_dcp:-false}" != "true" ] && _new_env="${_new_env} INSTALL_DCP=1 CONFIRM_AGPL=1"
+      [ "${UC_mineru:-false}" != "true" ] && _new_env="${_new_env} INSTALL_MINERU=1"
+      [ "${UC_superpowers_router:-false}" != "true" ] && _new_env="${_new_env} SUPERPOWERS_ROUTER=1"
+      [ "${UC_mem0:-false}" != "true" ] && [ "${UC_skillopt_sleep:-false}" != "true" ] && _new_env="${_new_env} INSTALL_CMODULES=1"
+      if [ -n "$_new_env" ]; then
+        echo -e "${BLUE}  ✦ 管道升级无法交互选装,以下组件未装。一键补装(复制执行):${NC}" >&2
+        echo -e "${BLUE}    curl -fsSL \"https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh\" | env $_new_env bash${NC}" >&2
+      fi
     fi
     return 0
   fi
