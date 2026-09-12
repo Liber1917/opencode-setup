@@ -350,10 +350,21 @@ step_end 1 "检测已有配置"
 #      SETUP_FORCE_MENU=1 为无 TTY 调试入口(供回归测试从 stdin 喂输入)
 # ------------------------------------------------------------------
 interactive_component_menu() {
-  [ "${UPGRADE_MODE:-0}" = "1" ] && return 0
+  # 升级模式不跳过菜单: 已装组件标注[✓],用户可增量勾选新组件(2026-09-12 用户裁定:
+  # "升级不应该静默,应该也有选装内容的交互")。非交互管道升级仍走状态清单还原(零打扰)。
   [ "${SETUP_INTERACTIVE:-1}" = "0" ] && return 0
   [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${INSTALL_CMODULES:-}${CONFIRM_AGPL:-}" ] && return 0
   if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
+    # 管道升级: 无 TTY 不能交互,但必须通知用户新增了哪些可选组件(不静默)
+    if [ "${UPGRADE_MODE:-0}" = "1" ]; then
+      _new_opts=""
+      [ "${UC_gsd:-false}" != "true" ] && _new_opts="${_new_opts} GSD"
+      [ "${UC_dcp:-false}" != "true" ] && _new_opts="${_new_opts} DCP"
+      [ "${UC_mineru:-false}" != "true" ] && _new_opts="${_new_opts} MinerU"
+      [ "${UC_superpowers_router:-false}" != "true" ] && _new_opts="${_new_opts} superpowers路由"
+      [ "${UC_mem0:-false}" != "true" ] && [ "${UC_skillopt_sleep:-false}" != "true" ] && _new_opts="${_new_opts} 记忆/自进化"
+      [ -n "$_new_opts" ] && echo -e "${BLUE}  ✦ 升级提示: 以下可选组件未装,需要时交互终端重跑或用环境变量:${_new_opts}${NC}" >&2
+    fi
     return 0
   fi
 
@@ -361,11 +372,16 @@ interactive_component_menu() {
   echo -e "${YELLOW}═══════════════════════════════════${NC}"
   echo -e "${YELLOW} 可选组件(全免费,默认都不装)${NC}"
   echo -e "${YELLOW}═══════════════════════════════════${NC}"
-  echo " 1. GSD 工作流        [ ] 多阶段项目管理(/gsd-* 命令,用户显式驱动)"
-  echo " 2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)"
-  echo " 3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)"
-  echo " 4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)"
-  echo " 5. 记忆/自进化     [ ] mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)"
+  # 升级模式: 已装组件预选标注[✓],输入编号可增减;全新安装: 全[ ]可选
+  _mk(){ if [ "${UPGRADE_MODE:-0}" = "1" ] && [ "${UC_$1:-false}" = "true" ]; then echo "[✓]"; else echo "[ ]"; fi; }
+  echo " 1. GSD 工作流        $(_mk gsd) 多阶段项目管理(/gsd-* 命令,用户显式驱动)"
+  echo " 2. DCP 上下文压缩     $(_mk dcp) 长会话自动压缩(AGPL-3.0,装前需确认)"
+  echo " 3. MinerU 文档解析    $(_mk mineru) PDF→Markdown 本地版(免费无限量,磁盘 20GB+)"
+  echo " 4. superpowers 路由   $(_mk superpowers_router) 技能清单渐进披露(默认官方急加载)"
+  echo " 5. 记忆/自进化     $(_mk mem0) mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)"
+  if [ "${UPGRADE_MODE:-0}" = "1" ]; then
+    echo " (升级: [✓]=已装保留; 输入编号=新增安装; 直接回车=保持现状)"
+  fi
   echo -e "${YELLOW}───────────────────────────────────${NC}"
   echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
 

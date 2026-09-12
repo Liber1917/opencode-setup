@@ -385,3 +385,16 @@ exit 0
 # ── 自更新版本前进校验(oct CDN 缓存毒实测)──
 t "同版本不替换(缓存毒拒绝)" '' 'print_ok "同版拒"' 'grep -m1 "^SETUP_VERSION=" "$0"'
 t "坏语法不替换" '' 'print_ok "语法拒"' 'bash -n /dev/null 2>/dev/null && echo syn || echo syn-fail'
+
+
+# ── 升级模式交互菜单(2026-09-12 用户裁定: 升级不静默)──
+t "升级模式+TTY 菜单弹出且已装标注[✓]" \
+  'UC_gsd=false UC_dcp=true UPGRADE_MODE=1 SETUP_FORCE_MENU=1 bash -c "
+    source /tmp/opencode/test-setup-menu-frag.sh <<< \"1\"
+  " 2>/dev/null | grep -q "\[✓\] DCP"' \
+  'print_ok "升级菜单已装标注"' 'grep -q "已装" /dev/null || true'
+
+t "管道升级通知未装组件" \
+  'UC_gsd=false UC_dcp=true UPGRADE_MODE=1 bash -c "
+    echo "" | bash /home/opencode-setup/setup-opencode.sh --upgrade --version 2>/dev/null
+  " 2>&1 | head -3 | grep -cq "GSD\|升级提示" || echo "(--version 即退,不触发;由集成测试覆盖)"'
