@@ -33,7 +33,7 @@ cd opencode-setup
 - **node/pip 国内源** — node 优先走 npmmirror 二进制（失败回退 nodesource）；pip 自动 ensurepip 引导 + 中科大 PyPI 源
 - **GSD Core 工作流（选装）** — 项目全生命周期管理；默认不装（实测零完成率收益、~4k tok/会话常驻成本），`INSTALL_GSD=1` 启用
 - **DCP 上下文压缩（选装）** — `INSTALL_DCP=1`（AGPL-3.0 需双重知会确认）；长会话上下文锯齿式回落，实测末态 -82%、计费当量 -43%
-- **MinerU 文档解析（选装）** — `INSTALL_MINERU=1` 本地档免费无限量（PDF/图片 → Markdown/JSON）；轻量走 Flash MCP 免装
+- **MinerU 文档解析（选装）** — `INSTALL_MINERU=1` 本地档免费无限量（PDF/图片 → Markdown/JSON），选装即自动接线 mineru-local skill + Flash MCP（agent 即刻可调用）；轻量走 Flash MCP 免装
 - **superpowers 路由模式（选装）** — `SUPERPOWERS_ROUTER=1` 渐进披露替代官方急加载（v1 全量目录 / v2 top-3 检索双形态）
 - **记忆/自进化（选装）** — `INSTALL_CMODULES=1` 或菜单选 `5`：mem0 偏好记忆 + SkillOpt 夜间提炼双通道；提炼产物只落草稿区，人工批准才生效（无自动生效路径）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
@@ -273,7 +273,7 @@ opencode plugin @tarquinen/opencode-dcp@latest --global  # 或手动安装（官
 
 > **付费立场声明**：本脚本只接免费路径——轻量用 Flash MCP，大量用本地部署；云 token 档请自行评估，我们不推荐（也不会自动配置）。
 
-**轻量路径（Flash MCP，零安装）**：在 `opencode.json` 的 `mcp` 段加入以下配置即可（不设 `MINERU_API_TOKEN` 即 Flash 免费档；`uvx` 需要 [uv](https://docs.astral.sh/uv/)，MCP 来自官方 [MinerU-Ecosystem](https://github.com/opendatalab/MinerU-Ecosystem)）：
+**轻量路径（Flash MCP，零安装）**：在 `opencode.json` 的 `mcp` 段加入以下配置即可（不设 `MINERU_API_TOKEN` 即 Flash 免费档；`uvx` 需要 [uv](https://docs.astral.sh/uv/)，MCP 来自官方 [MinerU-Ecosystem](https://github.com/opendatalab/MinerU-Ecosystem)；选装 `INSTALL_MINERU=1` 时此合并由脚本自动完成，无需手动）：
 
 ```json
 "mcp": {
@@ -299,6 +299,9 @@ INSTALL_MINERU=1 ./setup-opencode.sh
 4. 幂等写入 `~/.bashrc`：`export MINERU_MODEL_SOURCE=modelscope`（国内模型源，已存在不重复写）
 5. 验证 `mineru --version` / `import magic_pdf`（容错三连），成功绿√失败黄⚠附手动安装指引
 6. 提示模型下载时机：模型约数 GB，首次运行 `mineru` 时自动从 modelscope 下载
+7. agent 侧接线（不留裸 CLI 零调用面——agent 不会自发使用裸 CLI，实测教训）：部署 `preset-skills/mineru-local` skill（本地解析用法：后端选择 `-b pipeline`/`-b vlm-engine`、输出目录读法、隐私与超时注意事项）到 `~/.config/opencode/skills/`；按「轻量路径」同款配置幂等合并 Flash MCP `mineru-flash` 进 `opencode.json` 的 `mcp` 段（既有 mcp 条目保留，重复跑不重复写）；打印隐私知会一行（**Flash MCP 走云端处理（文档传 mineru.net，处理后不保留）；本地隐私文档用 mineru CLI**）；未检出 `uvx` 时黄警附 `curl -LsSf https://astral.sh/uv/install.sh | sh` 指引，不阻断
+
+> **选装后自动部署 mineru-local skill + Flash MCP（agent 即刻可调用）；隐私文档用本地 CLI，便捷任务用 Flash MCP。**
 
 ### superpowers 路由模式（可选，`SUPERPOWERS_ROUTER=1`）
 
