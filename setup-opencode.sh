@@ -1302,6 +1302,53 @@ DCP_EOF
   fi
 fi
 
+# MinerU agent 侧接线(INSTALL_MINERU=1 装完 python 包后调用; 抽函数法可测, 见 tests/test-mineru-wiring.sh)
+# 裸 CLI 不会被 agent 自发使用(实测教训), 需显式暴露双路:
+#   ① preset-skills/mineru-local 部署 → CONFIG_DIR/skills/(与步骤12 glob 同判据, 幂等)
+#   ② Flash MCP 幂等合并进 opencode.json mcp 段(python3 tmp+rename 原子写, 同 disabled_mcps 模式)
+#   ③ 隐私知会一行(硬要求) + uv/uvx 缺失黄警不阻断(uvx 是 Python 工具, 与 npm 无关)
+mineru_agent_wiring() {
+  # ① skill 部署(幂等: 已存在保持不动)
+  if [ -f "$SCRIPT_DIR/preset-skills/mineru-local/SKILL.md" ]; then
+    if [ -d "$CONFIG_DIR/skills/mineru-local" ]; then
+      echo -e "${BLUE}  - skill mineru-local 已存在, 保持不动${NC}"
+    else
+      mkdir -p "$CONFIG_DIR/skills/mineru-local"
+      cp -r "$SCRIPT_DIR/preset-skills/mineru-local/"* "$CONFIG_DIR/skills/mineru-local/"
+      echo -e "${GREEN}  ✓ preset-skill 已部署: mineru-local(本地文档解析, agent 即刻可调用)${NC}"
+    fi
+  else
+    echo -e "${YELLOW}  ⚠ 未找到 preset-skills/mineru-local(源码仓库外运行?), skill 部署跳过${NC}"
+  fi
+
+  # ② Flash MCP 幂等合并(免 key Flash 档 20 页/10MB; 既有 mcp 条目不覆盖)
+  if [ -f "$CONFIG_DIR/opencode.json" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$CONFIG_DIR/opencode.json" << 'PYEOF' \
+      && echo -e "${GREEN}  ✓ Flash MCP(mineru-flash)已合并进 opencode.json(重启 OpenCode 生效)${NC}" \
+      || echo -e "${YELLOW}  ⚠ Flash MCP 合并失败(opencode.json JSON 损坏?), 手动配置见 README「MinerU 文档解析」${NC}"
+import json, os, sys
+p = sys.argv[1]
+with open(p) as f:
+    c = json.load(f)
+c.setdefault("mcp", {})
+c["mcp"]["mineru-flash"] = {"type": "local", "command": ["uvx", "mineru-open-mcp"], "enabled": True}
+tmp = p + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(c, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, p)
+PYEOF
+  else
+    echo -e "${YELLOW}  ⚠ 跳过 Flash MCP 合并(缺 opencode.json 或 python3), 手动配置见 README「MinerU 文档解析」${NC}"
+  fi
+
+  # ③ 隐私知会(硬要求一行) + uv 缺失黄警不阻断
+  echo -e "${BLUE}  - 隐私知会: Flash MCP 走云端处理(文档传 mineru.net, 处理后不保留); 本地隐私文档用 mineru CLI${NC}"
+  if ! command -v uvx >/dev/null 2>&1; then
+    echo -e "${YELLOW}  ⚠ 未检出 uvx(Flash MCP 启动依赖, uv 的运行器), 安装不阻断: curl -LsSf https://astral.sh/uv/install.sh | sh${NC}"
+  fi
+}
+
 # ------------------------------------------------------------------
 # MinerU 文档解析(选装, INSTALL_MINERU=1 启用; 不占步骤号)
 # PDF/图片 → Markdown/JSON; 免费分层: Flash 云 API 免装限量 / 本地部署免费无限量
@@ -1374,6 +1421,9 @@ else
 
   # ⑥ 模型下载时机提示
   echo -e "${BLUE}  - 模型约数 GB, 首次运行 mineru 时自动从 modelscope 下载${NC}"
+
+  # ⑦ agent 侧接线: mineru-local skill + Flash MCP(装完包 agent 即刻可调用, 不留裸 CLI 零调用面)
+  mineru_agent_wiring
 fi
 
 # ------------------------------------------------------------------
@@ -1586,6 +1636,8 @@ PYEOF
     for d in "$SCRIPT_DIR/preset-skills"/*/; do
       name=$(basename "$d")
       [ -f "$d/SKILL.md" ] || continue
+      # mineru-local 仅随 INSTALL_MINERU=1 部署(MinerU 段 ⑦ 已接线; 未选装时不得经此 glob 误装)
+      [ "$name" = "mineru-local" ] && [ "${INSTALL_MINERU:-0}" != "1" ] && continue
       if [ -d "$CONFIG_DIR/skills/$name" ]; then
         echo -e "${BLUE}  - skill $name 已存在,跳过${NC}"
       else
@@ -1670,6 +1722,19 @@ elif [ "${INSTALL_MINERU:-0}" = "1" ]; then
   echo "  MinerU 解析:  未装成(安装失败或 pip 缺失),手动: python3 -m pip install \"mineru[core]\"(PEP 668 系统加 --break-system-packages)"
 else
   echo "  MinerU 解析:  未安装(大量解析 INSTALL_MINERU=1 本地档; 轻量用 Flash MCP, 见 README)"
+fi
+# MinerU agent 侧接线在场复核(动态判定: skill 目录 + mcp 段键; 收尾清单禁止静态列举)
+if [ "${INSTALL_MINERU:-0}" = "1" ]; then
+  MINERU_WIRE=""
+  [ -f "$CONFIG_DIR/skills/mineru-local/SKILL.md" ] && MINERU_WIRE="mineru-local skill"
+  if grep -q '"mineru-flash"' "$CONFIG_DIR/opencode.json" 2>/dev/null; then
+    MINERU_WIRE="${MINERU_WIRE:+$MINERU_WIRE + }Flash MCP"
+  fi
+  if [ -n "$MINERU_WIRE" ]; then
+    echo "  MinerU 接线:  $MINERU_WIRE 已部署(agent 即刻可调用; 隐私文档用本地 CLI, 便捷任务用 Flash MCP)"
+  else
+    echo "  MinerU 接线:  未部署(重跑 INSTALL_MINERU=1 ./setup-opencode.sh 可补)"
+  fi
 fi
 # 选装汇总行: 按实际在场判定(装机选中≠装成——pip 失败链会静默跳过 MinerU/SkillOpt)
 EXTRAS_SUM=""
