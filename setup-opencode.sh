@@ -1547,6 +1547,18 @@ PYEOF
     echo -e "${BLUE}  - opstate → ~/.local/bin/opstate(D-声明式任务状态对账)${NC}"
   fi
 
+  # ④e E-心跳 部署(实时心跳: 读审计流尾部算调用/速率/子代理;查询式零常驻税。
+  #     MOD_DIR 副本已由上文 e-modules/*.sh glob 带走,此处只装 PATH 入口)
+  if [ -f "$SCRIPT_DIR/e-modules/heartbeat.sh" ]; then
+    cp "$SCRIPT_DIR/e-modules/heartbeat.sh" "$HOME/.local/bin/heartbeat" 2>/dev/null || { mkdir -p "$HOME/.local/bin"; cp "$SCRIPT_DIR/e-modules/heartbeat.sh" "$HOME/.local/bin/heartbeat"; }
+    chmod +x "$HOME/.local/bin/heartbeat"
+    echo -e "${BLUE}  - heartbeat → ~/.local/bin/heartbeat(实时心跳: 读审计流算调用/速率/子代理)${NC}"
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) echo -e "${YELLOW}    ⚠ ~/.local/bin 不在 PATH,手动: export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}" ;;
+    esac
+  fi
+
   # ⑤ B-Ⅰ 环境画像(specs/B-environment.md Phase1)
   if [ -f "$SCRIPT_DIR/b-modules/env-profile.sh" ]; then
     cp "$SCRIPT_DIR/b-modules/env-profile.sh" "$MOD_DIR/" && chmod +x "$MOD_DIR/env-profile.sh"

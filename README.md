@@ -60,7 +60,7 @@ cd opencode-setup
 ~/.claude/
 └── settings.json           ←  Hooks 配置
 
-~/.local/bin/               ←  webmap / opstate（步骤 12 部署；rtk 非 root 回退时也在此）
+~/.local/bin/               ←  webmap / opstate / heartbeat（步骤 12 部署；rtk 非 root 回退时也在此）
 ~/.npmrc                    ←  npm 镜像源（npmmirror）
 ~/.bunfig.toml              ←  Bun registry 镜像
 ~/.bashrc                   ←  Bun/npm 路径；INSTALL_MINERU=1 时追加 MINERU_MODEL_SOURCE=modelscope
@@ -84,7 +84,7 @@ cd opencode-setup
 
     步骤 11 与 12 之间另有三个**不占步骤号**的选装段：DCP 上下文压缩（`INSTALL_DCP=1`，AGPL-3.0 安装前后双重知会 + 确认门，非交互需 `CONFIRM_AGPL=1`）、MinerU 文档解析（`INSTALL_MINERU=1`，Apache-2.0）与记忆/自进化双通道（`INSTALL_CMODULES=1`，装完交互问是否开启夜间自进化定时任务）。三者默认跳过，见下文对应小节。
 
-12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 出环硬门控（`/completion-gate` 斜杠命令：宣称完成前独立复核，check 阻断/report 报告）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
+12. 安全与能力增强（可选，`SKIP_SECURITY=1` 跳过，随仓库分发）——部署权限红线（交互版 59 条：14 deny / 6 ask / 39 allow）/ 审计模块（脱敏+熔断+成本告警+30 天轮转）/ 实时心跳（`heartbeat` 命令：读审计流算调用/速率/子代理，查询式零常驻税）/ 出环硬门控（`/completion-gate` 斜杠命令：宣称完成前独立复核，check 阻断/report 报告）/ 安全自检 + AGENT-CARD / 合规文档（CN/EU）/ webmap / opencode-env 插件（env/git/codegraph/GSD 四片段）/ opstate / env-profile / self-portrait / preset-skills / 路由自检
 
 ### 交互式选装菜单
 
@@ -192,6 +192,7 @@ curl -fsSL "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/ope
 |---|---|---|
 | `gen-permissions.sh` | 权限红线（三档模板：交互版 59 条 bash 规则：14 deny / 6 ask / 39 常用 allow；无头版 7 条红线；沙箱版网络红线，见下小节） | 重新生成：`bash gen-permissions.sh`（终端上问标准/沙箱档；无头：`--headless`；沙箱：`--sandbox`） |
 | `audit-init.sh` | 审计模块（JSONL + 密钥脱敏 + 熔断器 + 30 天轮转） | 初始化：`bash audit-init.sh`；轮转：`bash audit-init.sh --rotate` |
+| `heartbeat.sh` | 实时心跳（读审计流尾部算最近会话调用/事件速率/子代理状态，一行输出；不碰 opencode.db，审计流无 token 字段故无 token 数） | 查询：`heartbeat [窗口行数]`（默认 50，装后 `~/.local/bin/heartbeat`） |
 | `completion-gate.sh` | 出环硬门控（evidence-gated completion，`/completion-gate` 斜杠命令） | 阻断：`bash completion-gate.sh check [workdir]`；报告：`report` 子命令 |
 | `security-check.sh` | 安全自检（密钥治理/offline/provenance/注入扫描）+ AGENT-CARD 生成 | 装完跑一次：`bash security-check.sh`；开 offline：`bash security-check.sh --offline` |
 | `gen-compliance.sh` | 合规文档（CN/EU 双地区，provider 数据流向清单） | `bash gen-compliance.sh --region cn` |
