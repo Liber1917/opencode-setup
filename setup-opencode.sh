@@ -14,6 +14,8 @@ fi
 
 set -e
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# 管道/升级场景: ~/.local/bin 可能不在默认 PATH,探测组件前扩入(webmap/opstate/mem0 等安装位)
+export PATH="$HOME/.local/bin:$PATH"
 
 # 参数解析(动态升级 P0): --version/--upgrade/-h 即时退出,不进 12 步主流程;
 # 未识别参数忽略(与历史行为一致,主流程本就不吃参数)
@@ -1435,17 +1437,25 @@ step_begin
 echo -e "${YELLOW}[12/12] 安全与能力增强模块...${NC}"
 
 MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
+# e-modules 源目录: 优先仓库(SCRIPT_DIR),管道升级回退到已部署的 MOD_DIR
+EMOD_SRC="$SCRIPT_DIR/e-modules"
+[ -d "$EMOD_SRC" ] || EMOD_SRC="$MOD_DIR"
 PERM_TMP=$(mktemp)
 _prev_trap() { step_summary; rm -f "$PERM_TMP" 2>/dev/null || true; }
 trap _prev_trap EXIT
 
 if [ "$SKIP_SECURITY" = "1" ]; then
   echo -e "${BLUE}  - 已跳过（SKIP_SECURITY=1）${NC}"
-elif [ -d "$SCRIPT_DIR/e-modules" ]; then
+elif [ -d "$CONFIG_DIR/opencode-setup-modules" ] && [ -f "$CONFIG_DIR/opencode-setup-modules/audit-init.sh" ]; then
+  # 管道升级回退: 仓库不在本地,但上次部署的模块还在配置目录——从那里续命
+  MOD_DIR="$CONFIG_DIR/opencode-setup-modules"
+  mkdir -p "$MOD_DIR" "$MOD_DIR/devcontainer"
+  echo -e "${BLUE}  - 管道升级: 从已部署模块目录续命($MOD_DIR)${NC}"
+elif [ -d "$EMOD_SRC" ] && [ -f "$EMOD_SRC/audit-init.sh" ]; then
   # 部署 e-modules 到配置目录
   mkdir -p "$MOD_DIR" "$MOD_DIR/devcontainer"
-  cp "$SCRIPT_DIR/e-modules/"*.sh "$MOD_DIR/" 2>/dev/null
-  cp "$SCRIPT_DIR/e-modules/devcontainer/"*.json "$SCRIPT_DIR/e-modules/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
+  cp "$EMOD_SRC/"*.sh "$MOD_DIR/" 2>/dev/null
+  cp "$EMOD_SRC/devcontainer/"*.json "$EMOD_SRC/devcontainer/"*.md "$MOD_DIR/devcontainer/" 2>/dev/null
   chmod +x "$MOD_DIR"/*.sh 2>/dev/null
 
   echo -e "${BLUE}  - e-modules 已部署到 $MOD_DIR${NC}"
@@ -1511,9 +1521,9 @@ PYEOF
   # ②b 出环硬门控(evidence-gated completion, AGENTS.md 在场守则的机器执行层)
   #    挂载形态依据: opencode 1.18.29 config schema 无 event 键,TUI/run 双实测
   #    event 命令不触发,无 Stop/session.idle 等价事件 → /completion-gate 斜杠命令形态
-  if [ -f "$MOD_DIR/completion-gate.sh" ] && [ -f "$SCRIPT_DIR/e-modules/completion-gate.md" ]; then
+  if [ -f "$MOD_DIR/completion-gate.sh" ] && [ -f "$EMOD_SRC/completion-gate.md" ]; then
     mkdir -p "$CONFIG_DIR/commands"
-    cp "$SCRIPT_DIR/e-modules/completion-gate.md" "$CONFIG_DIR/commands/completion-gate.md"
+    cp "$EMOD_SRC/completion-gate.md" "$CONFIG_DIR/commands/completion-gate.md"
     echo -e "${GREEN}  ✓ 出环硬门控已部署——宣称完成前跑 /completion-gate(check 阻断,report 仅报告)${NC}"
     echo -e "${BLUE}    用法: $MOD_DIR/completion-gate.sh check|report [workdir](双控实证假成功 44-52%→3%)${NC}"
   fi
@@ -1549,8 +1559,8 @@ PYEOF
 
   # ④e E-心跳 部署(实时心跳: 读审计流尾部算调用/速率/子代理;查询式零常驻税。
   #     MOD_DIR 副本已由上文 e-modules/*.sh glob 带走,此处只装 PATH 入口)
-  if [ -f "$SCRIPT_DIR/e-modules/heartbeat.sh" ]; then
-    cp "$SCRIPT_DIR/e-modules/heartbeat.sh" "$HOME/.local/bin/heartbeat" 2>/dev/null || { mkdir -p "$HOME/.local/bin"; cp "$SCRIPT_DIR/e-modules/heartbeat.sh" "$HOME/.local/bin/heartbeat"; }
+  if [ -f "$EMOD_SRC/heartbeat.sh" ]; then
+    cp "$EMOD_SRC/heartbeat.sh" "$HOME/.local/bin/heartbeat" 2>/dev/null || { mkdir -p "$HOME/.local/bin"; cp "$EMOD_SRC/heartbeat.sh" "$HOME/.local/bin/heartbeat"; }
     chmod +x "$HOME/.local/bin/heartbeat"
     echo -e "${BLUE}  - heartbeat → ~/.local/bin/heartbeat(实时心跳: 读审计流算调用/速率/子代理)${NC}"
     case ":$PATH:" in
