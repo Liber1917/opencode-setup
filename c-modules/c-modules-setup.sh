@@ -28,10 +28,11 @@ install_mem0() {
   echo "  用法: mem0 add '偏好' / mem0 search '查询';数据默认存 mem0 云,自托管可设 MEM0_BASE_URL"
 
   # ---- agent 侧暴露层(裸 CLI agent 不会自发用, 同 MinerU 双路教训) ----
-  # 接线依据(不猜): opencode.ai/docs/plugins——npm 插件包在 opencode.json 的
-  # plugin 数组按包名引用(启动时 Bun 自动安装);本地文件插件才走 plugins/ 目录。
-  # mem0-collector 是 npm 插件包(tarball 无 bin/无自有安装命令, index.js 导出
-  # OpenCode plugin 工厂) → 数组引用。MCP 侧同 mineru-flash: python3 tmp+rename 原子写。
+  # 接线依据(不猜): opencode.ai/docs/plugins + 本地插件先例(sp-router.ts/rtk.ts,
+  # setup-opencode.sh 实测)——plugins/ 顶层 .ts 自动发现;plugin 数组只认 npm 包。
+  # mem0 MCP 走 npm 包 → 数组/mcp 段接线;自动收集改自研本地插件(npm
+  # mem0-collector@0.7.0 半成品退役:TUI 静默/不写 mem0/只落 pending_sync 队列,
+  # 源码审计三环断裂——自研闭合, 见 c-modules/mem0-collector/plugin.js)。
   local cfg="$SD/opencode.json"
   if [ -f "$cfg" ] && command -v python3 >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
     python3 - "$cfg" << 'PYEOF' \
@@ -52,34 +53,39 @@ PYEOF
   else
     echo "  ⚠ 跳过 mem0 MCP 接线(缺 opencode.json/python3/npx 之一), 不阻断"
   fi
+  # 自研 collector 本地插件部署: plugins/ 顶层 .ts 唯一正确形态(.mjs 毒丸),
+  # 不进 plugin 数组(sp-router.ts/rtk.ts 先例);幂等(cp 覆盖同内容)
+  if [ -n "${MEM0_COLLECTOR_SRC:-}" ] && [ -f "$MEM0_COLLECTOR_SRC" ]; then
+    mkdir -p "$SD/plugins"
+    if cp "$MEM0_COLLECTOR_SRC" "$SD/plugins/mem0-collector.ts" 2>/dev/null \
+      && [ -f "$SD/plugins/mem0-collector.ts" ]; then
+      echo "  ✓ mem0-collector 自研插件已部署 → plugins/mem0-collector.ts(session.idle 启发式收集 → mem0 add → 下次会话 TUI 知会)"
+    else
+      echo "  ⚠ mem0-collector 部署失败(plugins/ 不可写?), 不阻断"
+    fi
+  else
+    echo "  ⚠ 跳过 mem0-collector 部署(源文件缺席: <repo>/c-modules/mem0-collector/plugin.js), 不阻断"
+  fi
+  # 旧版残留迁移: plugin 数组曾登记 npm mem0-collector → 移除(本地插件不进数组)
   if [ -f "$cfg" ] && command -v python3 >/dev/null 2>&1; then
     python3 - "$cfg" << 'PYEOF' \
-      && echo "  ✓ mem0-collector 自动收集已接线(会话结束自动提取偏好,免手动 add)" \
-      || echo "  ⚠ mem0-collector 接线失败(opencode.json JSON 损坏?), 手动: plugin 数组加 mem0-collector"
+      && echo "  ✓ plugin 数组已清理 npm mem0-collector 残留(如有)" \
+      || echo "  ⚠ plugin 数组清理失败(opencode.json JSON 损坏?), 手动: 移除 plugin 数组内 mem0-collector"
 import json, os, sys
 p = sys.argv[1]
 with open(p) as f:
     c = json.load(f)
-plugins = c.setdefault("plugin", [])
-if "mem0-collector" not in plugins:
-    plugins.append("mem0-collector")
-tmp = p + ".tmp"
-with open(tmp, "w") as f:
-    json.dump(c, f, indent=2, ensure_ascii=False)
-    f.write("\n")
-os.replace(tmp, p)
+plugins = c.get("plugin", [])
+if "mem0-collector" in plugins:
+    c["plugin"] = [x for x in plugins if x != "mem0-collector"]
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(c, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, p)
 PYEOF
-  else
-    echo "  ⚠ 跳过 mem0-collector 接线(缺 opencode.json/python3), 不阻断"
   fi
-  if command -v npm >/dev/null 2>&1; then
-    npm install -g mem0-collector >/dev/null 2>&1 \
-      && echo "  - mem0-collector 已预装(npm -g;OpenCode 启动时亦会自动安装 plugin 数组内包)" \
-      || echo "  ⚠ mem0-collector 预装失败, 不阻断(plugin 数组已登记, OpenCode 启动时会自动安装)"
-  else
-    echo "  ⚠ 无 npm, mem0-collector 未预装, 不阻断(plugin 数组已登记, OpenCode 启动时会自动安装)"
-  fi
-  echo "  隐私: 记忆数据存 mem0 云端(Agent Mode 免费 key);介意可 MEM0_BASE_URL 自托管"
+  echo "  隐私: 记忆数据存 mem0 云端(Agent Mode 免费 key);介意可 MEM0_BASE_URL 自托管;collector 密钥样文本一律不提取"
 }
 
 install_skillopt() {
@@ -102,7 +108,9 @@ install_skillopt() {
 # 双通道目录约定(spec C-2)
 SD="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 mkdir -p "$SD/memory" "$SD/skill-drafts"
-TDIR="$(dirname "$(readlink -f "$0")")/templates"
+DIR="$(dirname "$(readlink -f "$0")")"
+TDIR="$DIR/templates"
+MEM0_COLLECTOR_SRC="${MEM0_COLLECTOR_SRC:-$DIR/mem0-collector/plugin.js}"
 [ -f "$TDIR/memory-preferences.md" ] && cp -n "$TDIR/memory-preferences.md" "$SD/memory/preferences.md" 2>/dev/null || true
 [ -f "$TDIR/skill-draft-README.md" ] && cp -n "$TDIR/skill-draft-README.md" "$SD/skill-drafts/README.md" 2>/dev/null || true
 echo "  ✓ 双通道目录: $SD/memory(轻) + $SD/skill-drafts(重,评审后生效)"

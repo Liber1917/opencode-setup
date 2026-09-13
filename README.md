@@ -327,7 +327,7 @@ SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
 - **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'` / `mem0 search '查询'`
 - mem0 初始化免注册：`mem0 init --agent --agent-caller opencode`（免费档无卡；云端存储，自托管可设 `MEM0_BASE_URL`）
 - **通道② 流程改进** → [SkillOpt-Sleep](https://github.com/microsoft/SkillOpt)（MIT）：`skillopt-sleep` 扫 OpenCode 会话 → 提炼 → 验证门控 → 落草稿区待审
-- **agent 侧暴露**：mem0 MCP（手动存/查）+ [mem0-collector](https://www.npmjs.com/package/mem0-collector)（自动收集，零操作）——装器幂等接线进 `opencode.json`（`mcp.mem0` = `npx -y @mem0/mcp-server`；`plugin` 数组加 `mem0-collector`，OpenCode 启动时自动安装）
+- **agent 侧暴露**：mem0 MCP（手动存/查，`mcp.mem0` = `npx -y @mem0/mcp-server` 幂等接线进 `opencode.json`）+ **自研 mem0-collector 本地插件**（自动收集，`c-modules/mem0-collector/plugin.js`，~110 行零 npm 依赖）——替代 npm 包 v0.7.0（源码审计三环断裂：TUI 完全静默 / 根本不写 mem0、只落 `pending_sync/*.json` 本地队列 / 声称的 GitHub repo 404，属半成品）。自研闭合三环：`session.idle` 事件启发式提取用户偏好/环境事实句（每会话上限 3 条，密钥样文本一律不提取，宁缺勿滥零 token）→ `mem0 add` 存储（10s 超时 fail-open）→ 下次会话首条消息注入 TUI 知会（附 `mem0 search` / `mem0 delete` 管理提示）。装器部署为 `plugins/mem0-collector.ts`（本地插件顶层 .ts 自动发现，不进 `plugin` 数组，sp-router.ts 同款姿势；旧版数组残留自动迁移清除）
 
 ```bash
 INSTALL_CMODULES=1 ./setup-opencode.sh              # 菜单选 5 同效;交互终端装完会问定时
