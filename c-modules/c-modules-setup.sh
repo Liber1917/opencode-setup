@@ -59,7 +59,7 @@ PYEOF
     mkdir -p "$SD/plugins"
     # 管道部署回退: 源文件不在场(单文件拉取时 plugin.js 缺席)——从远端补拉(镜像链)
     if [ ! -f "$MEM0_COLLECTOR_SRC" ]; then
-      _mc_tmp="$(mktemp)"
+      _mc_tmp="$(mktemp /tmp/mem0-collector-XXXXXX.mjs)"
       curl -fsSL --max-time 30 "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/c-modules/mem0-collector/plugin.js" -o "$_mc_tmp" 2>/dev/null \
         || curl -fsSL --max-time 30 "https://raw.githubusercontent.com/Liber1917/opencode-setup/main/c-modules/mem0-collector/plugin.js" -o "$_mc_tmp" 2>/dev/null || true
       if [ -s "$_mc_tmp" ] && node --check "$_mc_tmp" 2>/dev/null; then
