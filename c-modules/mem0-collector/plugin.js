@@ -95,14 +95,20 @@ export const Mem0CollectorPlugin = async ({ client }) => {
         const sessionID = event?.properties?.sessionID
         if (!sessionID) return
         const marker = path.join(markerDir, `${sessionID}.json`)
-        if (fs.existsSync(marker)) return // 幂等: 每会话至多收集一次
+        // 增量收集: 首次命中后记录已提取句子,后续 idle 只提新增偏好句(同会话可多次,
+        // 不同偏好各归各位——修"一次性封死丢早期偏好"缺陷)
         const res = await client?.session?.messages?.({ sessionID })
-        const items = extractFromMessages(res?.data ?? res ?? [])
-        if (items.length === 0 || !mem0Available()) return // 无匹配静默; CLI 缺席休眠
-        const stored = items.filter(addMemory)
+        const allItems = extractFromMessages(res?.data ?? res ?? [])
+        if (allItems.length === 0 || !mem0Available()) return // 无匹配静默; CLI 缺席休眠
+        // 增量: 读已提取记录,只存新增偏好句(同会话可多次收集,不同偏好各归各位)
+        let alreadyStored = []
+        try { alreadyStored = JSON.parse(fs.readFileSync(marker, 'utf8')).stored ?? [] } catch {}
+        const newItems = allItems.filter((s) => !alreadyStored.includes(s))
+        if (newItems.length === 0) return // 本轮无新增
+        const stored = newItems.filter(addMemory)
         if (stored.length === 0) return // mem0 全败: 不写标记, 下次 idle 重试
         fs.mkdirSync(markerDir, { recursive: true })
-        fs.writeFileSync(marker, JSON.stringify({ stored, at: Date.now() }))
+        fs.writeFileSync(marker, JSON.stringify({ stored: [...alreadyStored, ...stored], at: Date.now() }))
         fs.writeFileSync(noticeFile, JSON.stringify({ sessionID, items: stored, at: Date.now() }))
       } catch (e) {
         console.error(`[mem0-collector] 收集失败(fail-open): ${e?.message ?? e}`)
