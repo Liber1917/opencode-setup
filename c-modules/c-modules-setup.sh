@@ -18,9 +18,7 @@ install_mem0() {
   echo "→ 通道① 用户偏好/recall: mem0(Apache-2.0)"
   if command -v mem0 >/dev/null 2>&1; then
     echo "  ✓ mem0 已安装: $(mem0 --version 2>/dev/null || echo OK)"
-    return
-  fi
-  if command -v npm >/dev/null 2>&1; then
+  elif command -v npm >/dev/null 2>&1; then
     npm install -g @mem0/cli >/dev/null 2>&1 && echo "  ✓ mem0 CLI 安装完成" \
       || echo "  ⚠ 安装失败, 可手动: npm install -g @mem0/cli"
   else
@@ -28,6 +26,60 @@ install_mem0() {
   fi
   echo "  初始化(免注册,Agent Mode 自助签发免费 key): mem0 init --agent --agent-caller opencode"
   echo "  用法: mem0 add '偏好' / mem0 search '查询';数据默认存 mem0 云,自托管可设 MEM0_BASE_URL"
+
+  # ---- agent 侧暴露层(裸 CLI agent 不会自发用, 同 MinerU 双路教训) ----
+  # 接线依据(不猜): opencode.ai/docs/plugins——npm 插件包在 opencode.json 的
+  # plugin 数组按包名引用(启动时 Bun 自动安装);本地文件插件才走 plugins/ 目录。
+  # mem0-collector 是 npm 插件包(tarball 无 bin/无自有安装命令, index.js 导出
+  # OpenCode plugin 工厂) → 数组引用。MCP 侧同 mineru-flash: python3 tmp+rename 原子写。
+  local cfg="$SD/opencode.json"
+  if [ -f "$cfg" ] && command -v python3 >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
+    python3 - "$cfg" << 'PYEOF' \
+      && echo "  ✓ mem0 MCP 已接线(agent 可调 add/search 记忆工具)" \
+      || echo "  ⚠ mem0 MCP 合并失败(opencode.json JSON 损坏?), 手动: mcp 段加 mem0 条目(npx -y @mem0/mcp-server)"
+import json, os, sys
+p = sys.argv[1]
+with open(p) as f:
+    c = json.load(f)
+c.setdefault("mcp", {})
+c["mcp"]["mem0"] = {"type": "local", "command": ["npx", "-y", "@mem0/mcp-server"], "enabled": True}
+tmp = p + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(c, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, p)
+PYEOF
+  else
+    echo "  ⚠ 跳过 mem0 MCP 接线(缺 opencode.json/python3/npx 之一), 不阻断"
+  fi
+  if [ -f "$cfg" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$cfg" << 'PYEOF' \
+      && echo "  ✓ mem0-collector 自动收集已接线(会话结束自动提取偏好,免手动 add)" \
+      || echo "  ⚠ mem0-collector 接线失败(opencode.json JSON 损坏?), 手动: plugin 数组加 mem0-collector"
+import json, os, sys
+p = sys.argv[1]
+with open(p) as f:
+    c = json.load(f)
+plugins = c.setdefault("plugin", [])
+if "mem0-collector" not in plugins:
+    plugins.append("mem0-collector")
+tmp = p + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(c, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, p)
+PYEOF
+  else
+    echo "  ⚠ 跳过 mem0-collector 接线(缺 opencode.json/python3), 不阻断"
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    npm install -g mem0-collector >/dev/null 2>&1 \
+      && echo "  - mem0-collector 已预装(npm -g;OpenCode 启动时亦会自动安装 plugin 数组内包)" \
+      || echo "  ⚠ mem0-collector 预装失败, 不阻断(plugin 数组已登记, OpenCode 启动时会自动安装)"
+  else
+    echo "  ⚠ 无 npm, mem0-collector 未预装, 不阻断(plugin 数组已登记, OpenCode 启动时会自动安装)"
+  fi
+  echo "  隐私: 记忆数据存 mem0 云端(Agent Mode 免费 key);介意可 MEM0_BASE_URL 自托管"
 }
 
 install_skillopt() {
