@@ -55,16 +55,28 @@ PYEOF
   fi
   # 自研 collector 本地插件部署: plugins/ 顶层 .ts 唯一正确形态(.mjs 毒丸),
   # 不进 plugin 数组(sp-router.ts/rtk.ts 先例);幂等(cp 覆盖同内容)
-  if [ -n "${MEM0_COLLECTOR_SRC:-}" ] && [ -f "$MEM0_COLLECTOR_SRC" ]; then
+  if [ -n "${MEM0_COLLECTOR_SRC:-}" ]; then
     mkdir -p "$SD/plugins"
-    if cp "$MEM0_COLLECTOR_SRC" "$SD/plugins/mem0-collector.ts" 2>/dev/null \
+    # 管道部署回退: 源文件不在场(单文件拉取时 plugin.js 缺席)——从远端补拉(镜像链)
+    if [ ! -f "$MEM0_COLLECTOR_SRC" ]; then
+      _mc_tmp="$(mktemp)"
+      curl -fsSL --max-time 30 "https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/c-modules/mem0-collector/plugin.js" -o "$_mc_tmp" 2>/dev/null \
+        || curl -fsSL --max-time 30 "https://raw.githubusercontent.com/Liber1917/opencode-setup/main/c-modules/mem0-collector/plugin.js" -o "$_mc_tmp" 2>/dev/null || true
+      if [ -s "$_mc_tmp" ] && node --check "$_mc_tmp" 2>/dev/null; then
+        MEM0_COLLECTOR_SRC="$_mc_tmp"
+        echo "  - 管道模式: plugin.js 从远端补拉成功"
+      else
+        rm -f "$_mc_tmp" 2>/dev/null || true
+      fi
+    fi
+    if [ -f "$MEM0_COLLECTOR_SRC" ] && cp "$MEM0_COLLECTOR_SRC" "$SD/plugins/mem0-collector.ts" 2>/dev/null \
       && [ -f "$SD/plugins/mem0-collector.ts" ]; then
       echo "  ✓ mem0-collector 自研插件已部署 → plugins/mem0-collector.ts(session.idle 启发式收集 → mem0 add → 下次会话 TUI 知会)"
     else
-      echo "  ⚠ mem0-collector 部署失败(plugins/ 不可写?), 不阻断"
+      echo "  ⚠ 跳过 mem0-collector 部署(源文件缺席且远端补拉失败), 不阻断"
     fi
   else
-    echo "  ⚠ 跳过 mem0-collector 部署(源文件缺席: <repo>/c-modules/mem0-collector/plugin.js), 不阻断"
+    echo "  ⚠ 跳过 mem0-collector 部署(MEM0_COLLECTOR_SRC 未设), 不阻断"
   fi
   # 旧版残留迁移: plugin 数组曾登记 npm mem0-collector → 移除(本地插件不进数组)
   if [ -f "$cfg" ] && command -v python3 >/dev/null 2>&1; then
