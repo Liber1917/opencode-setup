@@ -26,3 +26,20 @@
 - MIT/免费立场: 不推荐付费,AGPL 选装必须双重知会 + 确认门
 - 真实环境测试优先: Docker 干净容器测不出第三方源/内存/信号类问题;每个产品决策要有 benchmark 背书
 - 中文输出,中英文空格排版
+
+## Memory
+
+This repo keeps persistent context in `docs/memory/`.
+- At the start of a task, read `docs/memory/facts.md` (kept under ~50 lines).
+- When you complete a milestone, make a decision, or hit a pitfall, append to `docs/memory/memory-log.jsonl`.
+- Search past context with `grep -i "<term>" docs/memory/memory-log.jsonl`.
+- Project context belongs in `docs/memory/`, not in your built-in or local memory system.
+
+(契约原文来源: murillovp/persistent-memory, MIT;主题模板与反记忆清单来源: LuciferForge/claude-code-memory, MIT)
+
+### 不要存进记忆的东西(代码能 tell 你的都不存)
+
+- 代码规范/文件路径/git 历史/具体 bug 修复方案
+- 只存: 用户偏好、纠错记录(错→改→因)、决策及原因、外部资源指针
+
+### facts.md 上限 50 行,超限把最旧的搬入 memory-log.jsonl(type:"fact-archive")

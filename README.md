@@ -35,7 +35,7 @@ cd opencode-setup
 - **DCP 上下文压缩（选装）** — `INSTALL_DCP=1`（AGPL-3.0 需双重知会确认）；长会话上下文锯齿式回落，实测末态 -82%、计费当量 -43%
 - **MinerU 文档解析（选装）** — `INSTALL_MINERU=1` 本地档免费无限量（PDF/图片 → Markdown/JSON），选装即自动接线 mineru-local skill + Flash MCP（agent 即刻可调用）；轻量走 Flash MCP 免装
 - **superpowers 路由模式（选装）** — `SUPERPOWERS_ROUTER=1` 渐进披露替代官方急加载（v1 全量目录 / v2 top-3 检索双形态）
-- **记忆/自进化（选装）** — `INSTALL_CMODULES=1` 或菜单选 `5`：mem0 偏好记忆 + SkillOpt 夜间提炼双通道；提炼产物只落草稿区，人工批准才生效（无自动生效路径）
+- **记忆/自进化（选装）** — `INSTALL_CMODULES=1` 或菜单选 `5`：本地记忆（docs/memory/，零依赖零外发）+ SkillOpt 夜间提炼双通道；提炼产物只落草稿区，人工批准才生效（无自动生效路径）
 - **CodeGraph MCP** — 代码图索引工具（`codegraph_*` 工具族，项目内 `codegraph init` 后生效）
 - **零假设** — 除 curl 和 git 外不依赖任何预装工具（node/bun 均自动安装）
 
@@ -49,7 +49,7 @@ cd opencode-setup
 ├── node_modules/           ←  oh-my-openagent（官方模式下另有 superpowers 插件）
 ├── plugins/                ←  rtk.ts（命令输出压缩）/ opencode-env.ts（步骤 12）/ sp-router.ts（SUPERPOWERS_ROUTER=1）
 ├── command/                ←  GSD Core 命令（INSTALL_GSD=1 时存在）
-├── memory/                 ←  mem0 偏好记忆（INSTALL_CMODULES=1 时创建）
+├── docs/memory/            ←  本地记忆 facts.md + memory-log.jsonl + 主题模板（INSTALL_CMODULES=1 时创建；零外发）
 ├── skill-drafts/           ←  SkillOpt 夜间提炼草稿区（INSTALL_CMODULES=1 时创建；人工批准后移入 skills/）
 ├── skills/                 ←  技能目录（步骤 12 部署 preset-skills）
 ├── sp-vault/               ←  superpowers-zh 克隆（SUPERPOWERS_ROUTER=1 时存在，更新 = git pull）
@@ -98,7 +98,7 @@ cd opencode-setup
  2. DCP 上下文压缩     [ ] 长会话自动压缩(AGPL-3.0,装前需确认)
  3. MinerU 文档解析    [ ] PDF→Markdown 本地版(免费无限量,磁盘 20GB+)
  4. superpowers 路由   [ ] 技能清单渐进披露(默认官方急加载)
- 5. 记忆/自进化     [ ] mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)
+ 5. 记忆/自进化     [ ] 本地记忆(docs/memory 零外发)+SkillOpt 夜间提炼(草稿区审批制)
 ───────────────────────────────────
  输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装):
 ```
@@ -146,7 +146,7 @@ node 缺失时优先从 npmmirror 下载官方二进制（LTS v24 → v22，按�
 export INSTALL_GSD=1          # 选装 GSD 工作流（默认跳过，见下文选装说明）
 export INSTALL_DCP=1          # 选装 DCP 上下文压缩插件（AGPL-3.0，需知情确认，见「DCP 上下文压缩」小节；非交互另需 CONFIRM_AGPL=1）
 export INSTALL_MINERU=1       # 选装 MinerU 文档解析·本地档（免费无限量，Apache-2.0，见「MinerU 文档解析」小节；轻量可用 Flash MCP 免装）
-export INSTALL_CMODULES=1     # 选装记忆/自进化双通道（mem0+SkillOpt，见「记忆/自进化」小节；非交互不问定时，默认不开启）
+export INSTALL_CMODULES=1     # 选装记忆/自进化双通道（本地记忆+SkillOpt，见「记忆/自进化」小节；非交互不问定时，默认不开启）
 export SUPERPOWERS_ROUTER=1   # 启用 superpowers 路由模式（渐进披露替代官方急加载，见「superpowers 路由模式」小节）
 export SETUP_INTERACTIVE=0    # 强制关闭交互式选装菜单（设置任一上面的选装变量时菜单本就不出现，见「交互式选装菜单」小节）
 export SKIP_SECURITY=1        # 跳过步骤 12 安全与能力增强
@@ -322,12 +322,15 @@ SUPERPOWERS_ROUTER=1 ./setup-opencode.sh
 
 ### 记忆/自进化（选装，`INSTALL_CMODULES=1` 或菜单选 `5`）
 
-装 **mem0 + SkillOpt 双通道**（复用 `c-modules/c-modules-setup.sh --all` 装器，不重复实现）：
+装 **本地记忆 + SkillOpt 双通道**（复用 `c-modules/c-modules-setup.sh --all` 装器，不重复实现）：
 
-- **通道① 用户偏好 recall** → [mem0](https://github.com/mem0ai/mem0)（Apache-2.0）：会话中 `mem0 add '记住X'` / `mem0 search '查询'`
-- mem0 初始化免注册：`mem0 init --agent --agent-caller opencode`（免费档无卡；云端存储，自托管可设 `MEM0_BASE_URL`）
+- **通道① 用户偏好 recall** → **本地记忆 `docs/memory/`**（零依赖零外发，**粘合自** [murillovp/persistent-memory](https://github.com/murillovp/persistent-memory)（MIT，facts.md 热读 + memory-log.jsonl 冷追加 + 50 行 fact-archive 轮换）与 [LuciferForge/claude-code-memory](https://github.com/LuciferForge/claude-code-memory)（MIT，user_profile/feedback_style/project_overview/reference_links 四主题模板 + 反记忆清单），**不自研记忆格式**）
+  - `facts.md` 热读：任务开工先读，~50 行上限（超限最旧事实轮换入 jsonl）；`memory-log.jsonl` 冷追加：决策/坑/偏好逐行 append（`{"date":"YYYY-MM-DD","type":"...","summary":"..."}`），`grep -i "<term>"` 按需检索——零 token 膨胀
+  - 反记忆清单（代码能 tell 你的都不存）：代码规范/文件路径/git 历史/具体 bug 修复方案不入库；只存用户偏好、纠错记录（错→改→因）、决策及原因、外部资源指针
+  - **mem0 三件套（CLI/MCP/collector 云端链）已退役**：零依赖、零外发、无云端注册；装器自动清理升级残留（`mcp.mem0` 条目/npm 数组残留/旧版 collector 插件）
 - **通道② 流程改进** → [SkillOpt-Sleep](https://github.com/microsoft/SkillOpt)（MIT）：`skillopt-sleep` 扫 OpenCode 会话 → 提炼 → 验证门控 → 落草稿区待审
-- **agent 侧暴露**：mem0 MCP（手动存/查，`mcp.mem0` = `npx -y @mem0/mcp-server` 幂等接线进 `opencode.json`）+ **自研 mem0-collector 本地插件**（自动收集，`c-modules/mem0-collector/plugin.js`，~110 行零 npm 依赖）——替代 npm 包 v0.7.0（源码审计三环断裂：TUI 完全静默 / 根本不写 mem0、只落 `pending_sync/*.json` 本地队列 / 声称的 GitHub repo 404，属半成品）。自研闭合三环：`session.idle` 事件启发式提取用户偏好/环境事实句（每会话上限 3 条，密钥样文本一律不提取，宁缺勿滥零 token）→ `mem0 add` 存储（10s 超时 fail-open）→ 下次会话首条消息注入 TUI 知会（附 `mem0 search` / `mem0 delete` 管理提示）。装器部署为 `plugins/mem0-collector.ts`（本地插件顶层 .ts 自动发现，不进 `plugin` 数组，sp-router.ts 同款姿势；旧版数组残留自动迁移清除）
+- **agent 侧暴露**：① `opencode-env` 插件 **MemoryFragment**（项目级 `docs/memory/facts.md` 优先、用户级兜底，首条消息注入一行预览 + 超 50 行截断提醒；文件缺席静默）；② **mem0-collector 本地插件（已改本地版）**，`c-modules/mem0-collector/plugin.js`：`session.idle` 启发式提取用户偏好/环境事实句（每会话上限 3 条，密钥样文本一律不提取，宁缺勿滥）→ 直接 append 进 `docs/memory/memory-log.jsonl`（`type:"user-preference"`，尾换行自动修复）→ 下次会话首条消息注入 TUI 知会（附本地 grep 管理提示）；同时承接 facts.md 50 行 fact-archive 轮换（照 murillovp 设计）。装器不再自动部署，按需手动：`cp c-modules/mem0-collector/plugin.js ~/.config/opencode/plugins/mem0-collector.ts`
+- **仓库级（无需 setup）**：本仓库 `AGENTS.md` 已带记忆契约（murillovp 原文 + 反记忆清单），`docs/memory/` 随 clone 即用——任何 agent 开工先读 facts.md、收尾 append jsonl
 
 ```bash
 INSTALL_CMODULES=1 ./setup-opencode.sh              # 菜单选 5 同效;交互终端装完会问定时
@@ -354,7 +357,7 @@ bash c-modules/c-modules-setup.sh --all             # 或手动单独运行装�
 router-modules/  ←  上下文优化（sp-router：superpowers 渐进披露路由插件 + 信号索引/校验器/种子生成器，见 router-modules/README.md）
 a-modules/       ←  A 方向联网认知（webmap CLI：llms.txt 站点文档装成 skill，3S 护栏）
 b-modules/       ←  B 方向环境感知（opencode-env 插件 + env-profile.sh）
-c-modules/       ←  C 方向集成模块（mem0 + SkillOpt 装器 + self-portrait；经菜单第 5 项/INSTALL_CMODULES=1 接入）
+c-modules/       ←  C 方向集成模块（本地记忆 + SkillOpt 装器 + self-portrait；经菜单第 5 项/INSTALL_CMODULES=1 接入）
 d-modules/       ←  D 方向控制（opstate 声明式任务状态 + fetch-skills 指引）
 e-modules/       ←  E 方向安全模块（6 个脚本 + devcontainer）
 preset-skills/   ←  预设 skill（ai-communication 沟通协议）

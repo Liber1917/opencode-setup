@@ -109,12 +109,34 @@ class GsdFragment extends Fragment {
   }
 }
 
+// ── 片段: 本地记忆热读(docs/memory/facts.md 预览,murillovp 契约)──
+// 来源: murillovp/persistent-memory(MIT)——facts.md 热读(~50 行上限),
+// memory-log.jsonl 冷追加按需 grep。项目级优先,用户级(~/.config/opencode)兜底。
+class MemoryFragment extends Fragment {
+  constructor(dir) { super('memory'); this.dir = dir }
+  probe() {
+    const cfgDir = process.env.OPENCODE_CONFIG_DIR || path.join(os.homedir(), '.config', 'opencode')
+    const candidates = [
+      path.join(this.dir, 'docs', 'memory', 'facts.md'),   // 项目级优先(clone 即生效)
+      path.join(cfgDir, 'docs', 'memory', 'facts.md'),     // 用户级(c-modules 部署)
+    ]
+    let raw = null
+    for (const p of candidates) { try { raw = fs.readFileSync(p, 'utf8'); break } catch { /* 逐级回退 */ } }
+    if (raw == null) return null // 无记忆文件: 静默
+    // 预览取实际内容: 剥模板注释/折叠空白后前 80 字符(脚手架不是事实)
+    const preview = raw.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+    const lines = raw.split('\n').length - (raw.endsWith('\n') ? 1 : 0)
+    const over = lines > 50 ? ` [⚠ facts.md ${lines} 行超 50 上限,最旧事实应轮换入 memory-log.jsonl(type:fact-archive)]` : ''
+    return `  Memory: ${preview}... (全量: 读 docs/memory/facts.md)${over}`
+  }
+}
+
 // ── 注入主逻辑(Phase 1+4)─────────────────────────────
 export const EnvPlugin = async ({ client, directory }) => {
   const workDir = directory || process.cwd()
 
   // Fragment 注册表(Phase 2)
-  const fragments = [ new EnvFragment(), new GitFragment(workDir), new CodegraphFragment(workDir), new GsdFragment(workDir) ]
+  const fragments = [ new EnvFragment(), new GitFragment(workDir), new CodegraphFragment(workDir), new GsdFragment(workDir), new MemoryFragment(workDir) ]
   const MARK = 'opencode-env-injected'
 
   const buildBlock = () => {

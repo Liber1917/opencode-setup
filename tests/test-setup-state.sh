@@ -159,20 +159,22 @@ out="$(state_field "$STATE" 'd["flags"]["permission_mode"]')"
 assert_eq "$out" "unknown" "无权限红线(步骤12未跑) → permission_mode=unknown"
 
 # 装前组件期望: 与夹具在场逐一对照(在场守则——探测必须等于夹具事实)
+# mem0/skillopt-sleep 命令探测已由 local_memory(docs/memory/facts.md 在场)取代
 WANT_BEFORE="$(python3 -c 'import json
 print(json.dumps({"opencode": True, "bun": True, "node": False, "rtk": False,
- "codegraph": False, "webmap": False, "opstate": False, "mem0": False,
- "skillopt-sleep": False, "mineru": False, "dcp": False, "gsd": False,
+ "codegraph": False, "webmap": False, "opstate": False, "local_memory": False,
+ "mineru": False, "dcp": False, "gsd": False,
  "superpowers_router": False, "cmolecules_cron": False}, sort_keys=True))')"
 out="$(state_field "$STATE" 'json.dumps(d["components"], sort_keys=True)')"
-assert_eq "$out" "$WANT_BEFORE" "装前组件值与在场一致(14 项逐一吻合)"
+assert_eq "$out" "$WANT_BEFORE" "装前组件值与在场一致(13 项逐一吻合)"
 
 # 中间态: cron 有其他条目但无 skillopt-sleep → 仍 false(不误报)
 out="$(FAKE_CRONTAB_TEXT='0 5 * * * echo other-job' run_case "$HOME_C" "$BIN:$SYSBIN" "$TMPD/snip-detect.sh")"
 assert_contains "$out" '"cmolecules_cron": false' "cron 有表但无 skillopt-sleep → false(不误报)"
 
-# --- 装后: 其余 8 命令在场 + dcp 注册 + gsd 命令 + sp-router + cron 在册 ---
-for t in node rtk codegraph webmap opstate mem0 skillopt-sleep mineru; do : > "$BIN/$t"; chmod +x "$BIN/$t"; done
+# --- 装后: 其余命令在场 + 本地记忆文件 + dcp 注册 + gsd 命令 + sp-router + cron 在册 ---
+for t in node rtk codegraph webmap opstate mineru; do : > "$BIN/$t"; chmod +x "$BIN/$t"; done
+mkdir -p "$CFG/docs/memory" && : > "$CFG/docs/memory/facts.md"
 python3 - "$CFG/opencode.json" << 'PYEOF'
 import json, sys
 p = sys.argv[1]
@@ -191,8 +193,8 @@ assert_contains "$out" "状态清单 → " "装后重写成功(幂等: 每次运
 
 WANT_AFTER="$(python3 -c 'import json
 print(json.dumps({"opencode": True, "bun": True, "node": True, "rtk": True,
- "codegraph": True, "webmap": True, "opstate": True, "mem0": True,
- "skillopt-sleep": True, "mineru": True, "dcp": True, "gsd": True,
+ "codegraph": True, "webmap": True, "opstate": True, "local_memory": True,
+ "mineru": True, "dcp": True, "gsd": True,
  "superpowers_router": True, "cmolecules_cron": True}, sort_keys=True))')"
 out="$(state_field "$STATE" 'json.dumps(d["components"], sort_keys=True)')"
 assert_eq "$out" "$WANT_AFTER" "装后组件值与在场一致(dcp 以 opencode.json 实注册为准)"
@@ -205,8 +207,8 @@ b = json.load(open(sys.argv[2]))["components"]
 print(",".join(sorted(k for k in b if a.get(k) != b[k])))
 PYEOF
 )"
-WANT_DIFF="cmolecules_cron,codegraph,dcp,gsd,mem0,mineru,node,opstate,rtk,skillopt-sleep,superpowers_router,webmap"
-assert_eq "$DIFF_OUT" "$WANT_DIFF" "装前→装后 diff 恰好翻转 12 项新增组件"
+WANT_DIFF="cmolecules_cron,codegraph,dcp,gsd,local_memory,mineru,node,opstate,rtk,superpowers_router,webmap"
+assert_eq "$DIFF_OUT" "$WANT_DIFF" "装前→装后 diff 恰好翻转 11 项新增组件"
 [ ! -f "$STATE.tmp" ] && ok "装后原子写: 仍无 .tmp 残留" || bad "装后 .tmp 残留"
 
 echo "== D. permission_mode 推断(与 gen-permissions.sh 实模板交叉核对) =="

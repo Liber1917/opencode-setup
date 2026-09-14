@@ -125,13 +125,13 @@ else
   bad "入口段不应改写主清单"
 fi
 
-echo "== B. 状态还原全真变体(gsd/router/mem0 全 true) =="
+echo "== B. 状态还原全真变体(gsd/router/local_memory 全 true,兼旧键 mem0:true) =="
 HOME_T="$TMPD/homeT"; CFG_T="$HOME_T/.config/opencode"; mkdir -p "$CFG_T"
 python3 - "$CFG_T/.setup-state.json" << 'PYEOF'
 import json, sys
 comps = {k: False for k in ["opencode","bun","node","rtk","codegraph","webmap",
   "opstate","skillopt-sleep","mineru","dcp","cmolecules_cron"]}
-comps.update({"mem0": True, "gsd": True, "superpowers_router": True})
+comps.update({"mem0": True, "local_memory": True, "gsd": True, "superpowers_router": True})
 state = {"script_version": "v1.0", "installed_at": "2026-09-01T00:00:00+08:00",
   "components": comps, "flags": {"model": "", "permission_mode": "unknown"}}
 json.dump(state, open(sys.argv[1], "w"), indent=2, ensure_ascii=False)
@@ -139,14 +139,15 @@ PYEOF
 out="$(run_upgrade "$HOME_T" "$BIN:$SYSBIN" "$TMPD/snip-report.sh")"
 assert_contains "$out" "INSTALL_GSD=1" "gsd:true → INSTALL_GSD=1(已装接线一根不剥)"
 assert_contains "$out" "SUPERPOWERS_ROUTER=1" "superpowers_router:true → SUPERPOWERS_ROUTER=1"
-assert_contains "$out" "INSTALL_CMODULES=1" "mem0:true → INSTALL_CMODULES=1"
+assert_contains "$out" "INSTALL_CMODULES=1" "local_memory:true → INSTALL_CMODULES=1(新键)"
 assert_contains "$out" "INSTALL_DCP=unset" "dcp:false → INSTALL_DCP 不导出"
 assert_contains "$out" "UC_MODEL=[]" "flags.model 空串 → UC_MODEL 空值(eval 不炸)"
 
 echo "== C. 考古模式(无状态清单,v1.0 前安装) =="
 HOME_A="$TMPD/homeA"; CFG_A="$HOME_A/.config/opencode"; mkdir -p "$CFG_A"
-# 夹具在场事实: opencode/bun/mem0 命令在场 + dcp 已注册 + 无 gsd/router/cron
-for t in opencode bun mem0; do : > "$BIN/$t"; chmod +x "$BIN/$t"; done
+# 夹具在场事实: opencode/bun 命令在场 + 本地记忆文件 + dcp 已注册 + 无 gsd/router/cron
+for t in opencode bun; do : > "$BIN/$t"; chmod +x "$BIN/$t"; done
+mkdir -p "$CFG_A/docs/memory" && : > "$CFG_A/docs/memory/facts.md"
 cat > "$CFG_A/opencode.json" << 'EOF'
 {
   "model": "zhipuai-coding-plan/glm-5.3",
@@ -157,7 +158,7 @@ out="$(run_upgrade "$HOME_A" "$BIN:$SYSBIN" "$TMPD/snip-report.sh")"; rc=$?
 assert_eq "$rc" "0" "考古路径退出码 0"
 assert_contains "$out" "考古模式" "无状态清单打考古模式"
 assert_contains "$out" "INSTALL_DCP=1 CONFIRM_AGPL=1" "考古: opencode.json 实注册 dcp → INSTALL_DCP=1 CONFIRM_AGPL=1"
-assert_contains "$out" "INSTALL_CMODULES=1" "考古: mem0 命令在场 → INSTALL_CMODULES=1"
+assert_contains "$out" "INSTALL_CMODULES=1" "考古: docs/memory/facts.md 在场 → INSTALL_CMODULES=1"
 assert_contains "$out" "INSTALL_GSD=unset" "考古: 无 gsd 命令 → INSTALL_GSD 不导出"
 assert_contains "$out" "INSTALL_MINERU=unset" "考古: 无 mineru 命令 → INSTALL_MINERU 不导出"
 assert_not_contains "$out" "not found" "考古解析无 command not found 噪声(连字符键过滤)"
@@ -179,8 +180,9 @@ assert_contains "$out" "不剥已装接线" "-h 描述升级语义(不剥已装�
 grep -q 'UPGRADE_MODE=1$' "$SCRIPT" && ok "--upgrade 臂置旗 UPGRADE_MODE=1" || bad "--upgrade 臂未置旗"
 grep -qF '[ "${UPGRADE_MODE:-0}" = "1" ] && overwrite=n' "$SCRIPT" \
   && ok "步骤 1 覆盖问句前有升级模式分叉(overwrite=n)" || bad "步骤 1 缺升级分叉"
-grep -qF '[ "${UPGRADE_MODE:-0}" = "1" ] && return 0' "$SCRIPT" \
-  && ok "交互菜单开头有升级模式分叉(直接 return)" || bad "交互菜单缺升级分叉"
+# 升级模式菜单契约(2026-09-12 用户裁定: 升级不静默,进菜单标[✓]预选,非早期 return 0 跳过)
+grep -qF '_mk(){ if [ "${UPGRADE_MODE:-0}" = "1" ] && [ "${UC_$1:-false}" = "true" ]; then echo "[✓]"; else echo "[ ]"; fi; }' "$SCRIPT" \
+  && ok "升级模式进菜单不跳过(已装组件[✓]预选机制在场)" || bad "升级模式菜单预选机制(_mk)缺席"
 grep -qF '升级模式: 首次安装已确认 AGPL,状态清单留档' "$SCRIPT" \
   && ok "DCP 确认门有升级模式知会行" || bad "DCP 确认门缺升级知会"
 grep -qF '升级完成: 本次新装' "$SCRIPT" \

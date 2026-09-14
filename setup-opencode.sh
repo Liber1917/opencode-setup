@@ -14,7 +14,7 @@ fi
 
 set -e
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# 管道/升级场景: ~/.local/bin 可能不在默认 PATH,探测组件前扩入(webmap/opstate/mem0 等安装位)
+# 管道/升级场景: ~/.local/bin 可能不在默认 PATH,探测组件前扩入(webmap/opstate 等安装位)
 export PATH="$HOME/.local/bin:$PATH"
 
 # 参数解析(动态升级 P0): --version/--upgrade/-h 即时退出,不进 12 步主流程;
@@ -79,10 +79,13 @@ resolve_setup_version() {
 # 组件在场探测 → 单行 json 片段("name": true/false, ...),供 write_state_file 组装
 detect_components() {
   local out="" k present
-  for k in opencode bun node rtk codegraph webmap opstate mem0 skillopt-sleep mineru; do
+  for k in opencode bun node rtk codegraph webmap opstate mineru; do
     if command -v "$k" >/dev/null 2>&1; then present=true; else present=false; fi
     out="${out:+$out, }\"$k\": $present"
   done
+  # local_memory: 本地记忆层(docs/memory/facts.md 在场; mem0 三件套已退役)
+  if [ -f "$CONFIG_DIR/docs/memory/facts.md" ]; then present=true; else present=false; fi
+  out="$out, \"local_memory\": $present"
   # dcp: 以 opencode.json 实注册为准(与安装段装后验证/收尾汇总同一判据)
   if grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then present=true; else present=false; fi
   out="$out, \"dcp\": $present"
@@ -192,7 +195,8 @@ print('UC_MODEL='+repr(f.get('model','')))" 2>/dev/null)" 2>/dev/null || true
   [ "${UC_mineru:-false}" = "true" ] && export INSTALL_MINERU=1
   [ "${UC_gsd:-false}" = "true" ] && export INSTALL_GSD=1
   [ "${UC_superpowers_router:-false}" = "true" ] && export SUPERPOWERS_ROUTER=1
-  [ "${UC_mem0:-false}" = "true" ] || [ "${UC_skillopt:-false}" = "true" ] || [ "${UC_skillopt_sleep:-false}" = "true" ] && export INSTALL_CMODULES=1
+  # mem0→local_memory 改造: 旧键(mem0/skillopt_sleep)保留兼容既有状态清单,新键以 docs/memory 在场为准
+  [ "${UC_mem0:-false}" = "true" ] || [ "${UC_skillopt_sleep:-false}" = "true" ] || [ "${UC_local_memory:-false}" = "true" ] && export INSTALL_CMODULES=1
   export UPGRADE_MODE
 }
 
@@ -362,7 +366,7 @@ interactive_component_menu() {
       [ "${UC_dcp:-false}" != "true" ] && _new_env="${_new_env} INSTALL_DCP=1 CONFIRM_AGPL=1"
       [ "${UC_mineru:-false}" != "true" ] && _new_env="${_new_env} INSTALL_MINERU=1"
       [ "${UC_superpowers_router:-false}" != "true" ] && _new_env="${_new_env} SUPERPOWERS_ROUTER=1"
-      [ "${UC_mem0:-false}" != "true" ] && [ "${UC_skillopt_sleep:-false}" != "true" ] && _new_env="${_new_env} INSTALL_CMODULES=1"
+      [ "${UC_local_memory:-false}" != "true" ] && [ "${UC_cmolecules_cron:-false}" != "true" ] && _new_env="${_new_env} INSTALL_CMODULES=1"
       if [ -n "$_new_env" ]; then
         echo -e "${BLUE}  ✦ 管道升级无法交互选装,以下组件未装。一键补装(复制执行):${NC}" >&2
         echo -e "${BLUE}    curl -fsSL \"https://gh-proxy.com/https://raw.githubusercontent.com/Liber1917/opencode-setup/main/setup-opencode.sh\" | env $_new_env bash${NC}" >&2
@@ -381,7 +385,7 @@ interactive_component_menu() {
   echo " 2. DCP 上下文压缩     $(_mk dcp) 长会话自动压缩(AGPL-3.0,装前需确认)"
   echo " 3. MinerU 文档解析    $(_mk mineru) PDF→Markdown 本地版(免费无限量,磁盘 20GB+)"
   echo " 4. superpowers 路由   $(_mk superpowers_router) 技能清单渐进披露(默认官方急加载)"
-  echo " 5. 记忆/自进化     $(_mk mem0) mem0 偏好记忆+SkillOpt 夜间提炼(草稿区审批制)"
+  echo " 5. 记忆/自进化     $(_mk local_memory) 本地记忆(docs/memory 零外发)+SkillOpt 夜间提炼(草稿区审批制)"
   if [ "${UPGRADE_MODE:-0}" = "1" ]; then
     echo " (升级: [✓]=已装保留; 输入编号=新增安装; 直接回车=保持现状)"
   fi
@@ -1447,7 +1451,7 @@ fi
 
 # ------------------------------------------------------------------
 # 记忆/自进化双通道(选装, INSTALL_CMODULES=1 启用; 不占步骤号)
-# 复用 c-modules/c-modules-setup.sh 装器(--all = mem0+SkillOpt),不重复实现。
+# 复用 c-modules/c-modules-setup.sh 装器(--all = 本地记忆+SkillOpt),不重复实现。
 # 夜间自进化定时任务仅在两条路都真时交互问: 菜单选中(非环境变量预设) + [ -t 0 ];
 # 环境变量路径按非交互铁律不问、默认不开启、只打印开启命令一行。
 # ------------------------------------------------------------------
@@ -1456,10 +1460,10 @@ if [ "${INSTALL_CMODULES:-0}" != "1" ]; then
 else
   CMODULES_INSTALLED=0
   if [ -f "$SCRIPT_DIR/c-modules/c-modules-setup.sh" ]; then
-    echo "  正在安装 mem0 + SkillOpt 双通道(c-modules-setup --all)..."
+    echo "  正在安装本地记忆 + SkillOpt 双通道(c-modules-setup --all)..."
     if bash "$SCRIPT_DIR/c-modules/c-modules-setup.sh" --all; then
       CMODULES_INSTALLED=1
-      echo -e "${BLUE}  - mem0 初始化免注册: mem0 init --agent --agent-caller opencode(Agent Mode 自助签发免费 key;数据默认存 mem0 云,自托管可设 MEM0_BASE_URL)${NC}"
+      echo -e "${BLUE}  - 本地记忆: docs/memory/(facts.md 热读 + memory-log.jsonl 冷追加,零外发)——mem0 三件套已退役${NC}"
       echo -e "${BLUE}  - 契约: 产物只落 skill-drafts/,人工批准(移入 skills/)才生效——自进化无自动生效路径${NC}"
     else
       echo -e "${YELLOW}  ⚠ c-modules 装器执行失败, 可手动重试: bash c-modules/c-modules-setup.sh --all${NC}"
@@ -1613,10 +1617,10 @@ PYEOF
     echo -e "${BLUE}  - webmap → ~/.local/bin/webmap(A-联网认知:init/search/install/update)${NC}"
   fi
 
-  # ④c B-opencode-env 插件部署(消息注入 env 块,三 Fragment)
+  # ④c B-opencode-env 插件部署(消息注入 env 块,五 Fragment: env/git/codegraph/gsd/memory)
   if [ -f "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" ]; then
     cp "$SCRIPT_DIR/b-modules/opencode-env/.opencode/plugin.js" "$CONFIG_DIR/plugins/opencode-env.ts"
-    echo -e "${GREEN}  ✓ opencode-env 插件已部署 → plugins/opencode-env.ts(顶层 .ts 自动发现,env/git/codegraph 三片段)${NC}"
+    echo -e "${GREEN}  ✓ opencode-env 插件已部署 → plugins/opencode-env.ts(顶层 .ts 自动发现,env/git/codegraph/gsd/memory 五片段)${NC}"
   fi
 
   # ④d D-opstate 部署(声明式状态对账 CLI)
@@ -1759,10 +1763,8 @@ fi
 EXTRAS_SUM=""
 [ "${INSTALL_GSD:-0}" = "1" ] && EXTRAS_SUM="GSD"
 command -v mineru >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }MinerU"
-if command -v mem0 >/dev/null 2>&1 || command -v skillopt-sleep >/dev/null 2>&1; then
-  command -v mem0 >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }mem0"
-  command -v skillopt-sleep >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }SkillOpt"
-fi
+[ -f "$CONFIG_DIR/docs/memory/facts.md" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }本地记忆"
+command -v skillopt-sleep >/dev/null 2>&1 && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }SkillOpt"
 [ -f "$CONFIG_DIR/plugins/sp-router.ts" ] && EXTRAS_SUM="${EXTRAS_SUM:+$EXTRAS_SUM }superpowers路由"
 # DCP 存在"选中但 AGPL 门拒绝"中间态,以实际注册结果为准(与其安装段同一判据)
 if grep -q 'opencode-dcp' "$CONFIG_DIR/opencode.json" 2>/dev/null; then

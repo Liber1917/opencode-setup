@@ -66,7 +66,7 @@ assert_contains "$out" "FLAGS:0|0|0|1|0" "『4』→ 仅 superpowers 路由"
 out="$(menu_run '5\n' SETUP_FORCE_MENU=1)"
 assert_contains "$out" "FLAGS:0|0|0|0|1" "『5』→ 记忆/自进化选中"
 assert_contains "$out" "将安装: 记忆/自进化" "第 5 项选中回显"
-assert_contains "$out" "mem0 偏好记忆+SkillOpt 夜间提炼" "第 5 项菜单文案"
+assert_contains "$out" "本地记忆(docs/memory 零外发)+SkillOpt 夜间提炼" "第 5 项菜单文案"
 
 out="$(menu_run '1 5\n' SETUP_FORCE_MENU=1)"
 assert_contains "$out" "FLAGS:1|0|0|0|1" "『1 5』→ GSD+记忆/自进化"

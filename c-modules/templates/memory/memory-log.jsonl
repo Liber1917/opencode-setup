@@ -1,0 +1,1 @@
+{"date":"2026-09-14","type":"log","summary":"Local memory initialized: facts.md (hot read, ~50 lines) + memory-log.jsonl (cold append, grep on demand). Format: murillovp/persistent-memory (MIT)."}

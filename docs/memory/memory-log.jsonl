@@ -1,0 +1,1 @@
+{"date":"2026-09-14","type":"log","summary":"本地记忆层落地: 粘合 murillovp/persistent-memory(facts.md 热读 + memory-log.jsonl 冷追加 + 50 行轮换)与 LuciferForge/claude-code-memory(主题模板 + 反记忆清单),mem0 三件套(CLI/MCP/collector)退役,零依赖零外发"}

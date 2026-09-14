@@ -8,6 +8,11 @@ import path from 'node:path'
 const mod = await import(new URL('./.opencode/plugin.js', import.meta.url).href)
 const plugin = mod.default
 
+// 环境隔离: 用户级 facts.md 探测重定向到空 tmp(真机 ~/.config/opencode 可能已部署)
+const _cfgSandbox = mkdtempSync(path.join(tmpdir(), 'plg-cfg-'))
+const _prevCfg = process.env.OPENCODE_CONFIG_DIR
+process.env.OPENCODE_CONFIG_DIR = _cfgSandbox
+
 // ① 非 git 目录: 注入但无 Git 行 + 幂等 + part 纯净
 {
   const api = await plugin({ directory: tmpdir() })
@@ -50,4 +55,43 @@ const plugin = mod.default
   assert.ok(gsdLine && gsdLine.includes('Phase'), '有 .planning 注入 phase: ' + gsdLine)
   rmSync(d, { recursive: true, force: true })
 }
-console.log('✓ test-plugin: 3 组断言全过')
+// ④ MemoryFragment: 无 facts.md 静默;项目级注入预览行;超 50 行截断提醒;用户级兜底
+{
+  const d = mkdtempSync(path.join(tmpdir(), 'plg-'))
+  // ④a 无任何 facts.md → 静默
+  let api = await plugin({ directory: d })
+  let msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api['experimental.chat.messages.transform']({}, { messages: msgs })
+  assert.ok(!msgs[0].parts[0].text.includes('Memory:'), '无 facts.md 不注 Memory 行')
+  // ④b 项目级 facts.md → 注入一行预览(剥模板注释取实际事实)
+  mkdirSync(path.join(d, 'docs', 'memory'), { recursive: true })
+  writeFileSync(path.join(d, 'docs', 'memory', 'facts.md'), '# Facts\n<!-- 模板注释 -->\n- 用户偏好 bun 打包\n- 输出用中文\n')
+  api = await plugin({ directory: d }) // 新实例避开片段缓存
+  msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api['experimental.chat.messages.transform']({}, { messages: msgs })
+  const memLine = msgs[0].parts[0].text.split('\n').find(l => l.includes('Memory:'))
+  assert.ok(memLine && memLine.includes('用户偏好 bun 打包'), '预览含首条事实: ' + memLine)
+  assert.ok(memLine.includes('全量: 读 docs/memory/facts.md'), '全量指引在场')
+  assert.ok(!memLine.includes('⚠'), '50 行内无截断提醒')
+  // ④c 超 50 行 → 截断提醒
+  writeFileSync(path.join(d, 'docs', 'memory', 'facts.md'), '# Facts\n' + Array.from({ length: 55 }, (_, i) => `- 事实 ${i}`).join('\n') + '\n')
+  api = await plugin({ directory: d })
+  msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api['experimental.chat.messages.transform']({}, { messages: msgs })
+  const warnLine = msgs[0].parts[0].text.split('\n').find(l => l.includes('Memory:'))
+  assert.ok(warnLine && warnLine.includes('超 50 上限'), '超限截断提醒在场: ' + warnLine)
+  // ④d 项目级缺席 → 用户级兜底
+  rmSync(path.join(d, 'docs'), { recursive: true, force: true })
+  mkdirSync(path.join(_cfgSandbox, 'docs', 'memory'), { recursive: true })
+  writeFileSync(path.join(_cfgSandbox, 'docs', 'memory', 'facts.md'), '# Facts\n- 用户级事实一条\n')
+  api = await plugin({ directory: d })
+  msgs = [{ info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] }]
+  await api['experimental.chat.messages.transform']({}, { messages: msgs })
+  const userLine = msgs[0].parts[0].text.split('\n').find(l => l.includes('Memory:'))
+  assert.ok(userLine && userLine.includes('用户级事实一条'), '用户级 facts.md 兜底注入')
+  rmSync(d, { recursive: true, force: true })
+}
+if (_prevCfg === undefined) delete process.env.OPENCODE_CONFIG_DIR
+else process.env.OPENCODE_CONFIG_DIR = _prevCfg
+rmSync(_cfgSandbox, { recursive: true, force: true })
+console.log('✓ test-plugin: 4 组断言全过')
