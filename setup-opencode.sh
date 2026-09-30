@@ -354,11 +354,19 @@ step_end 1 "检测已有配置"
 #      SETUP_FORCE_MENU=1 为无 TTY 调试入口(供回归测试从 stdin 喂输入)
 # ------------------------------------------------------------------
 interactive_component_menu() {
-  # 升级模式不跳过菜单: 已装组件标注[✓],用户可增量勾选新组件(2026-09-12 用户裁定:
-  # "升级不应该静默,应该也有选装内容的交互")。非交互管道升级仍走状态清单还原(零打扰)。
+  # 优先级: 环境变量显式(最高) > SETUP_INTERACTIVE=0 > 无终端 > 弹菜单
   [ "${SETUP_INTERACTIVE:-1}" = "0" ] && return 0
   [ -n "${INSTALL_GSD:-}${INSTALL_DCP:-}${INSTALL_MINERU:-}${SUPERPOWERS_ROUTER:-}${INSTALL_CMODULES:-}${CONFIRM_AGPL:-}" ] && return 0
-  if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ ! -t 0 ]; then
+  # 管道交互: stdin 被占但 /dev/tty 在场(真终端跑 curl|bash)→ 照样弹菜单;
+  # 真·无终端(CI/docker exec -i)才跳过
+  local _tty_ok=0
+  [ -t 0 ] && _tty_ok=1
+  # /dev/tty 存在且可打开(exec 3<> 测试;容器里可能存在但 ENXIO)
+  if [ -e /dev/tty ] && exec 3<>/dev/tty 2>/dev/null; then
+    exec 3<&- 3>&-
+    _tty_ok=1
+  fi
+  if [ "${SETUP_FORCE_MENU:-0}" != "1" ] && [ "$_tty_ok" = "0" ]; then
     # 管道升级: 无 TTY 不能交互,但必须通知用户新增了哪些可选组件(不静默)
     if [ "${UPGRADE_MODE:-0}" = "1" ]; then
       _new_env=""
@@ -392,10 +400,18 @@ interactive_component_menu() {
   echo -e "${YELLOW}───────────────────────────────────${NC}"
   echo -n ' 输入要启用的编号(空格分隔,如 "1 3";直接回车=全不装): '
 
+  # stdin 被管道占用时从 /dev/tty 读用户输入(rustup/nvm 同款);
+  # SETUP_FORCE_MENU(测试/调试)保持 stdin 读——回归测试依赖管道喂输入
+  local _from_tty=0
+  [ "${SETUP_FORCE_MENU:-0}" = "0" ] && { [ -t 0 ] || { [ -e /dev/tty ] && _from_tty=1; }; }
   local attempt answer sel ok picks=""
   for attempt in 1 2 3; do
     answer=""
-    read -r answer || answer=""   # stdin 耗尽(EOF)按全不装,不挂死
+    if [ "$_from_tty" = "1" ]; then
+      read -r answer < /dev/tty || answer=""
+    else
+      read -r answer || answer=""   # stdin 耗尽(EOF)按全不装,不挂死
+    fi
     if [ -z "${answer//[[:space:]]/}" ]; then
       picks=""
       break
